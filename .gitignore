@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Mac
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Données scrappées temporaires
+team_stats_*.json
+*_stats.json
+historique.csv
+
+# Dossiers virtuels
+.venv/
+venv/

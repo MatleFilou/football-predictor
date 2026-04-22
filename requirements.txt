@@ -1,1 +1,6 @@
+streamlit
+streamlit-mic-recorder
 requests
+beautifulsoup4
+lxml
+playwright
