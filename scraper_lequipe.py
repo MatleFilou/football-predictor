@@ -33,11 +33,41 @@ Sortie JSON compatible avec l'app Streamlit :
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# Auto-installation de Chromium (nécessaire sur Streamlit Community Cloud)
+# ---------------------------------------------------------------------------
+
+def _ensure_chromium() -> None:
+    """
+    Vérifie que le binaire Chromium de Playwright est disponible.
+    Si absent (ex. premier démarrage sur Streamlit Cloud), le télécharge
+    silencieusement via `playwright install chromium`.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as _p:
+            exe = _p.chromium.executable_path
+            if not os.path.exists(exe):
+                raise FileNotFoundError(exe)
+    except Exception:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=False,
+            capture_output=True,
+        )
+
+
+_ensure_chromium()
 
 # ---------------------------------------------------------------------------
 # Compétitions disponibles sur lequipe.fr
@@ -57,7 +87,26 @@ COMPETITIONS = {
     "coupe-intercontinentale":    "Coupe Intercontinentale",
     "super-coupe-d-europe":       "Super Coupe d'Europe",
     "trophee-des-champions":      "Trophée des Champions",
+    # Coupes nationales
+    "coupe-d-allemagne":          "Coupe d'Allemagne",
+    "fa-cup":                     "FA Cup",
+    "league-cup":                 "League Cup",
+    "coupe-du-roi":               "Copa del Rey",
+    "coupe-d-italie":             "Coupe d'Italie",
 }
+
+# Compétitions supplémentaires à scraper selon la ligue principale
+# (en plus du championnat national, pour couvrir toutes les compétitions)
+EXTRA_COMPS_BY_MAIN: dict[str, list[str]] = {
+    "ligue-1":                  ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-de-france"],
+    "championnat-d-allemagne":  ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-d-allemagne"],
+    "championnat-d-angleterre": ["ligue-des-champions", "ligue-europa", "ligue-conference", "fa-cup", "league-cup"],
+    "championnat-d-espagne":    ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-du-roi"],
+    "championnat-d-italie":     ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-d-italie"],
+}
+
+# Durée de vie du cache (heures) — données considérées fraîches pendant cette durée
+CACHE_TTL_HOURS = 6
 
 # Compétitions par défaut à essayer selon le nom de l'équipe
 DEFAULT_COMPETITIONS_FR = ["ligue-1", "ligue-des-champions"]
@@ -72,16 +121,14 @@ DEFAULT_COMPETITIONS_IT = ["championnat-d-italie", "ligue-des-champions"]
 # Slug → compétition principale sur lequipe.fr
 # Slugs vérifiés directement sur lequipe.fr via les pages club
 SLUG_COMPETITION: dict[str, str] = {
-    # Ligue 1
+    # Ligue 1 (18 équipes 2025-26)
     "paris-sg": "ligue-1", "marseille": "ligue-1", "lyon": "ligue-1",
     "monaco": "ligue-1", "lille": "ligue-1", "nice": "ligue-1",
     "rennes": "ligue-1", "lens": "ligue-1", "strasbourg": "ligue-1",
-    "nantes": "ligue-1", "brest": "ligue-1", "montpellier": "ligue-1",
-    "toulouse": "ligue-1", "reims": "ligue-1", "le-havre": "ligue-1",
-    "lorient": "ligue-1", "metz": "ligue-1", "auxerre": "ligue-1",
-    "angers": "ligue-1", "paris-fc": "ligue-1",
-    "saint-etienne": "ligue-1", "bordeaux": "ligue-1", "clermont": "ligue-1",
-    # Premier League
+    "nantes": "ligue-1", "brest": "ligue-1", "toulouse": "ligue-1",
+    "le-havre": "ligue-1", "lorient": "ligue-1", "metz": "ligue-1",
+    "auxerre": "ligue-1", "angers": "ligue-1", "paris-fc": "ligue-1",
+    # Premier League (20 équipes 2025-26)
     "arsenal": "championnat-d-angleterre",
     "manchester-city": "championnat-d-angleterre",
     "manchester-united": "championnat-d-angleterre",
@@ -98,7 +145,11 @@ SLUG_COMPETITION: dict[str, str] = {
     "crystal-palace": "championnat-d-angleterre",
     "nottingham-forest": "championnat-d-angleterre",
     "bournemouth": "championnat-d-angleterre",
-    # La Liga
+    "west-ham": "championnat-d-angleterre",
+    "burnley": "championnat-d-angleterre",
+    "leeds": "championnat-d-angleterre",
+    "sunderland": "championnat-d-angleterre",
+    # La Liga (20 équipes 2025-26)
     "real-madrid": "championnat-d-espagne",
     "fc-barcelone": "championnat-d-espagne",
     "atletico-de-madrid": "championnat-d-espagne",
@@ -106,16 +157,39 @@ SLUG_COMPETITION: dict[str, str] = {
     "villarreal": "championnat-d-espagne",
     "real-sociedad": "championnat-d-espagne",
     "athletic-bilbao": "championnat-d-espagne",
-    "betis": "championnat-d-espagne",
-    "valence": "championnat-d-espagne",
-    # Bundesliga
-    "bayern": "championnat-d-allemagne",
+    "betis-seville": "championnat-d-espagne",
+    "valence-cf": "championnat-d-espagne",
+    "osasuna": "championnat-d-espagne",
+    "getafe": "championnat-d-espagne",
+    "rayo-vallecano": "championnat-d-espagne",
+    "celta-vigo": "championnat-d-espagne",
+    "alaves": "championnat-d-espagne",
+    "espanyol-barcelone": "championnat-d-espagne",
+    "gerone": "championnat-d-espagne",
+    "majorque": "championnat-d-espagne",
+    "elche": "championnat-d-espagne",
+    "levante": "championnat-d-espagne",
+    "oviedo": "championnat-d-espagne",
+    # Bundesliga (18 équipes 2025-26)
+    "bayern-munich": "championnat-d-allemagne",
     "borussia-dortmund": "championnat-d-allemagne",
     "bayer-leverkusen": "championnat-d-allemagne",
     "rb-leipzig": "championnat-d-allemagne",
     "eintracht-francfort": "championnat-d-allemagne",
     "wolfsburg": "championnat-d-allemagne",
-    # Serie A
+    "vfb-stuttgart": "championnat-d-allemagne",
+    "union-berlin": "championnat-d-allemagne",
+    "borussia-m-gladbach": "championnat-d-allemagne",
+    "fc-cologne": "championnat-d-allemagne",
+    "fribourg": "championnat-d-allemagne",
+    "werder-breme": "championnat-d-allemagne",
+    "augsbourg": "championnat-d-allemagne",
+    "hoffenheim": "championnat-d-allemagne",
+    "mayence": "championnat-d-allemagne",
+    "heidenheim": "championnat-d-allemagne",
+    "sankt-pauli": "championnat-d-allemagne",
+    "hambourg-sv": "championnat-d-allemagne",
+    # Serie A (20 équipes 2025-26)
     "juventus-turin": "championnat-d-italie",
     "inter-milan": "championnat-d-italie",
     "ac-milan": "championnat-d-italie",
@@ -124,6 +198,18 @@ SLUG_COMPETITION: dict[str, str] = {
     "lazio-rome": "championnat-d-italie",
     "atalanta-bergame": "championnat-d-italie",
     "fiorentina": "championnat-d-italie",
+    "torino": "championnat-d-italie",
+    "bologne": "championnat-d-italie",
+    "genoa": "championnat-d-italie",
+    "udinese": "championnat-d-italie",
+    "cagliari": "championnat-d-italie",
+    "hellas-verone": "championnat-d-italie",
+    "come": "championnat-d-italie",
+    "lecce": "championnat-d-italie",
+    "parme": "championnat-d-italie",
+    "sassuolo": "championnat-d-italie",
+    "cremonese": "championnat-d-italie",
+    "pise": "championnat-d-italie",
 }
 
 KNOWN_SLUGS: dict[str, str] = {
@@ -189,6 +275,12 @@ KNOWN_SLUGS: dict[str, str] = {
     "nottingham forest": "nottingham-forest",
     "nottm forest": "nottingham-forest",
     "bournemouth": "bournemouth",
+    "west ham": "west-ham",
+    "west ham united": "west-ham",
+    "burnley": "burnley",
+    "leeds": "leeds",
+    "leeds united": "leeds",
+    "sunderland": "sunderland",
     # La Liga
     "real madrid": "real-madrid",
     "barcelona": "fc-barcelone",
@@ -204,19 +296,41 @@ KNOWN_SLUGS: dict[str, str] = {
     "villarreal": "villarreal",
     "real sociedad": "real-sociedad",
     "athletic bilbao": "athletic-bilbao",
+    "athletic club": "athletic-bilbao",
     "athletic": "athletic-bilbao",
-    "real betis": "betis",
-    "betis": "betis",
-    "valencia": "valence",
+    "real betis": "betis-seville",
+    "betis": "betis-seville",
+    "betis seville": "betis-seville",
+    "valencia": "valence-cf",
+    "valence": "valence-cf",
     "osasuna": "osasuna",
+    "ca osasuna": "osasuna",
     "getafe": "getafe",
+    "getafe cf": "getafe",
     "rayo vallecano": "rayo-vallecano",
-    "celta vigo": "celta",
-    "celta": "celta",
+    "rayo": "rayo-vallecano",
+    "celta vigo": "celta-vigo",
+    "celta": "celta-vigo",
+    "rc celta": "celta-vigo",
+    "alaves": "alaves",
+    "deportivo alaves": "alaves",
+    "espanyol": "espanyol-barcelone",
+    "rcd espanyol": "espanyol-barcelone",
+    "girona": "gerone",
+    "girona fc": "gerone",
+    "mallorca": "majorque",
+    "rcd mallorca": "majorque",
+    "elche": "elche",
+    "elche cf": "elche",
+    "levante": "levante",
+    "levante ud": "levante",
+    "oviedo": "oviedo",
+    "real oviedo": "oviedo",
     # Bundesliga
-    "bayern": "bayern",
-    "bayern munich": "bayern",
-    "fc bayern": "bayern",
+    "bayern": "bayern-munich",
+    "bayern munich": "bayern-munich",
+    "fc bayern": "bayern-munich",
+    "fc bayern munich": "bayern-munich",
     "borussia dortmund": "borussia-dortmund",
     "dortmund": "borussia-dortmund",
     "bvb": "borussia-dortmund",
@@ -230,37 +344,93 @@ KNOWN_SLUGS: dict[str, str] = {
     "wolfsburg": "wolfsburg",
     "vfl wolfsburg": "wolfsburg",
     "freiburg": "fribourg",
+    "sc freiburg": "fribourg",
     "hoffenheim": "hoffenheim",
+    "tsg hoffenheim": "hoffenheim",
     "mainz": "mayence",
+    "mainz 05": "mayence",
+    "stuttgart": "vfb-stuttgart",
+    "vfb stuttgart": "vfb-stuttgart",
+    "union berlin": "union-berlin",
+    "1 fc union berlin": "union-berlin",
+    "gladbach": "borussia-m-gladbach",
+    "monchengladbach": "borussia-m-gladbach",
+    "borussia monchengladbach": "borussia-m-gladbach",
+    "m gladbach": "borussia-m-gladbach",
+    "cologne": "fc-cologne",
+    "koln": "fc-cologne",
+    "1 fc koln": "fc-cologne",
+    "fc koln": "fc-cologne",
+    "werder bremen": "werder-breme",
+    "werder": "werder-breme",
+    "augsburg": "augsbourg",
+    "fc augsburg": "augsbourg",
+    "heidenheim": "heidenheim",
+    "1 fc heidenheim": "heidenheim",
+    "st pauli": "sankt-pauli",
+    "saint pauli": "sankt-pauli",
+    "fc st pauli": "sankt-pauli",
+    "hamburg": "hambourg-sv",
+    "hamburger sv": "hambourg-sv",
+    "hsv": "hambourg-sv",
     # Serie A
     "juventus": "juventus-turin",
     "juve": "juventus-turin",
     "juventus turin": "juventus-turin",
     "inter milan": "inter-milan",
+    "internazionale": "inter-milan",
     "inter": "inter-milan",
     "ac milan": "ac-milan",
     "milan": "ac-milan",
     "napoli": "naples",
     "naples": "naples",
+    "ssc napoli": "naples",
     "as roma": "as-rome",
     "roma": "as-rome",
     "lazio": "lazio-rome",
     "ss lazio": "lazio-rome",
     "atalanta": "atalanta-bergame",
+    "atalanta bergame": "atalanta-bergame",
     "fiorentina": "fiorentina",
     "viola": "fiorentina",
+    "acf fiorentina": "fiorentina",
     "torino": "torino",
+    "torino fc": "torino",
     "bologna": "bologne",
-    "genoa": "genes",
+    "bologna fc": "bologne",
+    "genoa": "genoa",
+    "genoa cfc": "genoa",
+    "udinese": "udinese",
+    "udinese calcio": "udinese",
+    "cagliari": "cagliari",
+    "cagliari calcio": "cagliari",
+    "hellas verona": "hellas-verone",
+    "verona": "hellas-verone",
+    "como": "come",
+    "como 1907": "come",
+    "lecce": "lecce",
+    "us lecce": "lecce",
+    "parma": "parme",
+    "parma calcio": "parme",
+    "sassuolo": "sassuolo",
+    "us sassuolo": "sassuolo",
+    "cremonese": "cremonese",
+    "us cremonese": "cremonese",
+    "pisa": "pise",
+    "ac pisa": "pise",
 }
 
 MOIS_FR = {
+    # Avec accents (tels qu'affichés)
     "janv": "01", "févr": "02", "mars": "03", "avr": "04",
     "mai": "05", "juin": "06", "juil": "07", "août": "08",
     "sept": "09", "oct": "10", "nov": "11", "déc": "12",
     "janvier": "01", "février": "02", "avril": "04",
     "juillet": "07", "aout": "08", "septembre": "09",
     "octobre": "10", "novembre": "11", "décembre": "12",
+    # Sans accents (après slugify_query — nécessaire car parse_date_fr normalise d'abord)
+    "fevr": "02", "dec": "12",
+    "fevrier": "02", "decembre": "12",
 }
 
 
@@ -442,8 +612,8 @@ def scrape_team_calendar(competition: str, team_slug: str) -> list[dict]:
         # Extrait les matchs depuis le corps de la page (texte structuré)
         matches = _parse_calendar_text(body_text, team_slug, competition)
 
-        # Fallback DOM si le texte n'a pas donné assez de matchs
-        if len(matches) < 3:
+        # Fallback DOM uniquement si le texte n'a trouvé aucun match
+        if len(matches) < 1:
             matches = _parse_calendar_dom(page, team_slug, competition)
 
     finally:
@@ -480,12 +650,27 @@ def _parse_calendar_text(body_text: str, team_slug: str, competition: str) -> li
     cutoff = today - timedelta(days=MATCH_MAX_AGE_DAYS)
 
     SCORE_RE = re.compile(r"^(\d{1,2})[-–](\d{1,2})$")
-    # Lignes à ignorer entre date et score (numéros de journée, etc.)
+    # Lignes-frontières : arrêter la recherche (break) car on a dépassé le bloc de match
     SKIP_RE = re.compile(
         r"^\d{1,2}[eè]?\s*(?:journee|journée|j\.?|matchday|tour|round)"
         r"|^(?:masquer|afficher|voir|groupe|phase|poule)",
         re.IGNORECASE,
     )
+    # Annotations inline dans le bloc de match (entre le nom d'équipe et le score)
+    # → pas un nom d'équipe : ignorer (continue) sans stopper la recherche
+    INLINE_SKIP_RE = re.compile(
+        r"^(?:quarts?|demi|finale?s?|huitieme|seizieme|trente|aller|retour"
+        r"|1/[248]\s*finale?|play.?off|barrages?|qualif|repechage"
+        r"|[12]e\s+match|match\s+(?:aller|retour)|prolongations?|prol\.?"
+        r"|t\.?a\.?b\.?(?:\s+\d+[-–]\d+)?)",
+        re.IGNORECASE | re.UNICODE,
+    )
+    # Suffixes parasites collés aux noms d'équipes par lequipe.fr
+    # (tirs au but, prolongations — ex : "Brestt.a.b. 5-4", "Lyonprol.")
+    # Note : pas de \b après \. (le point est non-word, \b échouerait)
+    TAB_SUFFIX_RE  = re.compile(r't\.a\.b\..*$', re.IGNORECASE)
+    PROL_SUFFIX_RE = re.compile(r'prol\..*$',    re.IGNORECASE)
+    TAB_LINE_RE    = re.compile(r'^t\.a\.b\.',   re.IGNORECASE)
 
     current_date: str | None = None
     matches: list[dict] = []
@@ -515,28 +700,94 @@ def _parse_calendar_text(body_text: str, team_slug: str, competition: str) -> li
             sh, sa = int(sm.group(1)), int(sm.group(2))
 
             # Cherche l'équipe domicile : remonte jusqu'à trouver un nom valide
-            # (ignore les annotations comme "(qualifié)", les numéros de journée, etc.)
+            # — ignore les annotations de tour CL/coupe (INLINE_SKIP_RE) → continue
+            # — s'arrête sur une frontière de journée/date (SKIP_RE) → break
             home_name = ""
-            for back in range(i - 1, max(i - 5, -1), -1):
+            home_back_idx = -1
+            for back in range(i - 1, max(i - 6, -1), -1):
                 candidate = lines[back]
                 if SKIP_RE.match(candidate) or parse_date_fr(candidate):
                     break
+                if INLINE_SKIP_RE.match(candidate):
+                    continue  # annotation de round, pas un nom d'équipe
                 if candidate and _is_valid_team_name(candidate):
                     home_name = candidate
+                    home_back_idx = back
                     break
 
             # Équipe extérieure : descend jusqu'à trouver un nom valide
             away_name = ""
-            for fwd in range(i + 1, min(i + 5, len(lines))):
+            away_fwd_idx = -1
+            for fwd in range(i + 1, min(i + 6, len(lines))):
                 candidate = lines[fwd]
                 if SKIP_RE.match(candidate) or parse_date_fr(candidate):
                     break
+                if INLINE_SKIP_RE.match(candidate):
+                    continue  # annotation de round, pas un nom d'équipe
                 if candidate and _is_valid_team_name(candidate):
                     away_name = candidate
+                    away_fwd_idx = fwd
                     break
 
             if home_name and away_name:
+                # --- Nettoyage des suffixes collés (t.a.b., prol.) ---
+                home_has_tab  = bool(TAB_SUFFIX_RE.search(home_name))
+                away_has_tab  = bool(TAB_SUFFIX_RE.search(away_name))
+                home_has_prol = bool(PROL_SUFFIX_RE.search(home_name))
+                away_has_prol = bool(PROL_SUFFIX_RE.search(away_name))
+
+                home_name = TAB_SUFFIX_RE.sub('', home_name).strip()
+                away_name = TAB_SUFFIX_RE.sub('', away_name).strip()
+                home_name = PROL_SUFFIX_RE.sub('', home_name).strip()
+                away_name = PROL_SUFFIX_RE.sub('', away_name).strip()
+
+                # Vérifie qu'on a encore des noms valides après nettoyage
+                if not home_name or not away_name:
+                    continue
+
+                # Détermine is_home au moment du parsing pour éviter un recalcul divergent
+                home_n = _norm(home_name)
+                team_n = _norm(team_slug)
+                is_home = (team_n in home_n or home_n in team_n)
+
+                # Résultat de base sur le score de temps réglementaire
                 res = result_for_team(team_slug, home_name, away_name, sh, sa)
+
+                # Correction pour les tirs au but : l'équipe dont le nom
+                # portait "t.a.b." a gagné (ex. "Brestt.a.b. 5-4" → Brest gagne)
+                if home_has_tab or away_has_tab:
+                    team_won_tab = (is_home and home_has_tab) or (not is_home and away_has_tab)
+                    res = "W" if team_won_tab else "L"
+
+                # Format B : t.a.b. sur sa propre ligne, immédiatement après le nom
+                # du vainqueur. Convention lequipe.fr :
+                #   • t.a.b. juste après l'équipe extérieure → l'ext. a gagné
+                #   • t.a.b. entre le nom domicile et le score → le dom. a gagné
+                elif not (home_has_tab or away_has_tab):
+                    standalone_tab = False
+                    tab_away_wins  = False
+
+                    # Cas 1 : t.a.b. juste après away_name
+                    if (away_fwd_idx >= 0
+                            and away_fwd_idx + 1 < len(lines)
+                            and TAB_LINE_RE.match(lines[away_fwd_idx + 1])):
+                        standalone_tab = True
+                        tab_away_wins  = True
+
+                    # Cas 2 : t.a.b. entre home_back_idx et le score
+                    if not standalone_tab and home_back_idx >= 0:
+                        for li in range(home_back_idx + 1, i):
+                            if TAB_LINE_RE.match(lines[li]):
+                                standalone_tab = True
+                                tab_away_wins  = False
+                                break
+
+                    if standalone_tab:
+                        if tab_away_wins:
+                            res = "W" if not is_home else "L"
+                        else:
+                            res = "W" if is_home else "L"
+
                 matches.append({
                     "date": current_date,
                     "competition": comp_name,
@@ -545,6 +796,7 @@ def _parse_calendar_text(body_text: str, team_slug: str, competition: str) -> li
                     "score_home": sh,
                     "score_away": sa,
                     "result": res,
+                    "is_home": is_home,
                 })
 
     matches.sort(key=lambda m: m["date"], reverse=True)
@@ -703,19 +955,61 @@ def _filter_team_matches(matches: list[dict], team_slug: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Cache fichier — évite de re-scraper des données déjà fraîches
+# ---------------------------------------------------------------------------
+
+def _cache_dir() -> Path:
+    d = Path(__file__).parent / "cache"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+def _load_cache(slug: str) -> dict | None:
+    """Retourne les données en cache si elles ont moins de CACHE_TTL_HOURS, sinon None."""
+    path = _cache_dir() / f"team_{slug}.json"
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        last_updated = datetime.fromisoformat(
+            data.get("last_updated", "2000-01-01T00:00:00")
+        )
+        age_min = int((datetime.now() - last_updated).total_seconds() // 60)
+        if age_min < CACHE_TTL_HOURS * 60:
+            print(f"[scraper] Cache utilisé pour '{slug}' (données vieilles de {age_min} min)")
+            data["from_cache"] = True
+            data["cache_age_min"] = age_min
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _save_cache(slug: str, data: dict) -> None:
+    try:
+        path = _cache_dir() / f"team_{slug}.json"
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[scraper] Cache non sauvegardé : {e}")
+
+
+# ---------------------------------------------------------------------------
 # Orchestration principale
 # ---------------------------------------------------------------------------
 
 def scrape_team(team_name: str,
                 competition: str | None = None,
-                nb_matches: int = 5) -> dict:
+                nb_matches: int = 5,
+                force_refresh: bool = False) -> dict:
     """
     Scrape les {nb_matches} derniers matchs d'une équipe sur lequipe.fr.
 
     Stratégie :
      1. Résout le slug lequipe.fr depuis la table de correspondance ou dynamiquement.
-     2. Essaie la compétition précisée, puis les compétitions par défaut du pays.
-     3. Combine les résultats si plusieurs compétitions, garde les N plus récents.
+     2. Vérifie le cache (retour immédiat si données fraîches et force_refresh=False).
+     3. Scrape toutes les compétitions EN PARALLÈLE (championnat + CL + coupes).
+     4. Combine les résultats, déduplique, garde les N plus récents.
+     5. Sauvegarde le résultat dans le cache.
 
     Retourne un dict compatible avec app.py.
     """
@@ -730,53 +1024,76 @@ def scrape_team(team_name: str,
         if result:
             resolved_slug, discovered_competition = result
 
-    # Détermine les compétitions à scraper
+    # --- Vérification du cache (avant tout scraping) ---
+    if resolved_slug and not force_refresh and not competition:
+        cached = _load_cache(resolved_slug)
+        if cached:
+            return cached
+
+    # --- Construction de la liste complète des compétitions à scraper ---
     if competition:
-        competitions_to_try = [competition]
-        extra_comp = None
+        all_comps = [competition]
     elif discovered_competition:
-        # Compétition découverte dynamiquement depuis la page club
-        competitions_to_try = [discovered_competition]
-        extra_comp = "ligue-des-champions"
+        extra = EXTRA_COMPS_BY_MAIN.get(discovered_competition, ["ligue-des-champions"])
+        all_comps = list(dict.fromkeys([discovered_competition] + extra))
     else:
-        # Compétition principale depuis le mapping slug → compétition
         main_comp = SLUG_COMPETITION.get(resolved_slug or "") if resolved_slug else None
         if main_comp:
-            competitions_to_try = [main_comp]
+            extra = EXTRA_COMPS_BY_MAIN.get(main_comp, ["ligue-des-champions"])
+            all_comps = list(dict.fromkeys([main_comp] + extra))
         else:
-            # Fallback : essaie toutes les ligues majeures
-            competitions_to_try = [
+            # Slug complètement inconnu : essaie toutes les ligues majeures
+            all_comps = [
                 "ligue-1", "championnat-d-angleterre",
                 "championnat-d-espagne", "championnat-d-italie",
                 "championnat-d-allemagne",
             ]
-        extra_comp = "ligue-des-champions"
+
+    # Résolution du slug si encore inconnu
+    if not resolved_slug:
+        for comp in all_comps[:1]:
+            resolved_slug = find_team_slug_on_site(team_name, comp)
+            if resolved_slug:
+                break
+
+    if not resolved_slug:
+        raise RuntimeError(
+            f"Équipe '{team_name}' introuvable sur lequipe.fr.\n\n"
+            "Vérifications :\n"
+            "  • Vérifiez l'orthographe du nom\n"
+            "  • Précisez la compétition avec -c (ex: -c ligue-1)\n"
+            f"  • Compétitions disponibles : {', '.join(COMPETITIONS.keys())}"
+        )
+
+    # Vérification du cache après résolution (cas slug découvert dynamiquement)
+    if not force_refresh and not competition:
+        cached = _load_cache(resolved_slug)
+        if cached:
+            return cached
+
+    # --- Scraping parallèle de toutes les compétitions ---
+    print(f"[scraper] Scraping parallèle ({len(all_comps)} compétitions) pour '{resolved_slug}'…")
 
     all_matches: list[dict] = []
     found_competitions: list[str] = []
+    _slug = resolved_slug   # capture pour le thread
 
-    for comp in competitions_to_try:
-        # Résout le slug si pas encore trouvé
-        if not resolved_slug:
-            resolved_slug = find_team_slug_on_site(team_name, comp)
-            if not resolved_slug:
-                continue
+    def _scrape_one(comp: str) -> tuple[str, list[dict]]:
+        matches = scrape_team_calendar(comp, _slug)
+        return comp, _filter_team_matches(matches, _slug)
 
-        matches = scrape_team_calendar(comp, resolved_slug)
-        # Valide que les matchs impliquent bien l'équipe
-        matches = _filter_team_matches(matches, resolved_slug)
-        if matches:
-            found_competitions.append(comp)
-            all_matches.extend(matches)
-            break   # on a trouvé la bonne compétition
-
-    # Ajoute les matchs de Ligue des Champions si disponible
-    if resolved_slug and extra_comp and extra_comp not in found_competitions and not competition:
-        ldc_matches = scrape_team_calendar(extra_comp, resolved_slug)
-        ldc_matches = _filter_team_matches(ldc_matches, resolved_slug)
-        if ldc_matches:
-            all_matches.extend(ldc_matches)
-            found_competitions.append(extra_comp)
+    max_workers = min(len(all_comps), 3)   # 3 browsers max en simultané
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_scrape_one, comp): comp for comp in all_comps}
+        for future in as_completed(futures):
+            comp = futures[future]
+            try:
+                _, matches = future.result()
+                if matches:
+                    all_matches.extend(matches)
+                    found_competitions.append(comp)
+            except Exception as exc:
+                print(f"[scraper] Erreur pour '{comp}' : {exc}")
 
     if not all_matches:
         raise RuntimeError(
@@ -788,9 +1105,9 @@ def scrape_team(team_name: str,
             f"  • Compétitions disponibles : {', '.join(COMPETITIONS.keys())}"
         )
 
-    # Trie par date décroissante, déduplique, prend les N plus récents
-    seen = set()
-    unique = []
+    # --- Trie par date décroissante, déduplique, prend les N plus récents ---
+    seen: set = set()
+    unique: list[dict] = []
     for m in sorted(all_matches, key=lambda x: x["date"], reverse=True):
         key = (m["date"], m["home_team"], m["away_team"])
         if key not in seen:
@@ -799,7 +1116,7 @@ def scrape_team(team_name: str,
 
     matches_final = unique[:nb_matches]
 
-    # Calcul des statistiques
+    # --- Calcul des statistiques ---
     wins = draws = losses = 0
     goals_for = goals_against = 0
 
@@ -807,8 +1124,12 @@ def scrape_team(team_name: str,
     for m in matches_final:
         res = m["result"]
         sh, sa = m["score_home"], m["score_away"]
-        home_norm = _norm(m["home_team"])
-        is_home = (slug_norm in home_norm or home_norm in slug_norm)
+
+        if "is_home" in m:
+            is_home = m["is_home"]
+        else:
+            home_norm = _norm(m["home_team"])
+            is_home = (slug_norm in home_norm or home_norm in slug_norm)
 
         if res == "W":
             wins += 1
@@ -837,23 +1158,30 @@ def scrape_team(team_name: str,
         else first["away_team"]
     )
 
-    return {
+    result = {
         "team_name":          display_name,
         "team_slug":          resolved_slug,
         "source":             "lequipe.fr",
         "competitions":       found_competitions,
         "last_updated":       datetime.now().isoformat(timespec="seconds"),
+        "from_cache":         False,
         "nb_matches":         n,
         "wins":               wins,
         "draws":              draws,
         "losses":             losses,
         "goals_scored_avg":   gsa,
         "goals_conceded_avg": gca,
-        # Alias directs pour app.py (render_team_form)
+        # Alias directs pour app.py
         "goals_scored":       gsa,
         "goals_conceded":     gca,
         "matches":            matches_final,
     }
+
+    # --- Sauvegarde dans le cache ---
+    if not competition:
+        _save_cache(resolved_slug, result)
+
+    return result
 
 
 # ---------------------------------------------------------------------------

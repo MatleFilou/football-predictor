@@ -188,49 +188,20 @@ def predict_match(home, away):
 
 
 # ---------------------------------------------------------------------------
-# NOUVEAU — Indice de confiance enrichi (V2)
+# Indice de confiance — échelle 0 à 100
 #
-# V1 : indice = prob_max + écart avec prob_2
-# V2 : on ajoute un bonus/malus basé sur les nouvelles données :
-#   - Peu d'absents + joueur clé en forme   → bonus confiance
-#   - Beaucoup d'absents + joueur clé absent → malus confiance
+# Basé sur la probabilité du résultat le plus probable.
+# Un match à 3 issues équiprobables (33% chacune) donne 0.
+# Un résultat à 100% de probabilité donne 100.
+#
+# Formule : indice = (prob_max - 1/3) / (2/3) × 100
+# → ramène la plage [33%…100%] sur [0…100]
 # ---------------------------------------------------------------------------
 
 def confidence_index(res, home=None, away=None):
-    probs = sorted(
-        [res["home_prob"], res["draw_prob"], res["away_prob"]],
-        reverse=True,
-    )
-    gap   = probs[0] - probs[1]
-    base  = round(probs[0] + gap, 1)
-
-    if home is None or away is None:
-        return base
-
-    # Bonus/malus contextuel sur les deux équipes
-    adjustment = 0.0
-
-    for team in [home, away]:
-        nb_abs = team.get("nb_absents", 0)
-        kp     = team.get("key_player_present", True)
-
-        # Absences
-        if nb_abs == 0:
-            adjustment += 1.0
-        elif nb_abs == 1:
-            adjustment -= 1.0
-        elif nb_abs <= 3:
-            adjustment -= 3.0
-        else:
-            adjustment -= 6.0
-
-        # Joueur clé
-        if not kp:
-            adjustment -= 4.0
-        else:
-            adjustment += 2.0
-
-    return round(base + adjustment, 1)
+    prob_max = max(res["home_prob"], res["draw_prob"], res["away_prob"])
+    indice = (prob_max - 1/3) / (2/3) * 100
+    return round(max(0, min(100, indice)))
 
 
 # ---------------------------------------------------------------------------

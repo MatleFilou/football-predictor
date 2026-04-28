@@ -23,7 +23,7 @@ from predictor_v2 import (
     value_bet,
 )
 
-st.set_page_config(page_title="Mode Parieur", layout="wide")
+st.set_page_config(page_title="BetPredict Pro", page_icon="⚽", layout="wide")
 
 
 HISTORIQUE_PATH = "historique.csv"
@@ -244,7 +244,9 @@ def render_team_search(key_prefix: str, is_international: bool):
 
 
 def render_team_form(side_label: str, key_prefix: str, is_international: bool):
-    st.subheader(side_label)
+    css_class = "team-header-home" if side_label == "Domicile" else "team-header-away"
+    icon = "🏠" if side_label == "Domicile" else "✈️"
+    st.markdown(f'<div class="{css_class}">{icon} {side_label}</div>', unsafe_allow_html=True)
     render_lequipe_search(key_prefix, is_international=is_international)
     render_team_search(key_prefix, is_international)
     st.markdown("---")
@@ -322,7 +324,7 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
 
 def render_common_analysis(home, away, key_prefix, competition_label):
     st.markdown("---")
-    st.markdown("### 💰 Cotes bookmaker")
+    st.markdown('<div class="section-header">💰 Cotes bookmaker</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -400,39 +402,113 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             score_str = f"{best_score['home_goals']}-{best_score['away_goals']} ({round(best_score['probability']*100, 2)}%)"
 
             st.markdown("---")
-            st.subheader("📊 Probabilités")
+            st.markdown('<div class="section-header">📊 Probabilités</div>', unsafe_allow_html=True)
+
+            def _bar_color(p):
+                if p >= 55: return "#00c853"
+                if p >= 40: return "#f5a623"
+                return "#ff5252"
+
             col1, col2, col3 = st.columns(3)
-            col1.metric("1 — Domicile", f"{res['home_prob']}%")
-            col2.metric("N — Nul", f"{res['draw_prob']}%")
-            col3.metric("2 — Extérieur", f"{res['away_prob']}%")
+            for col, label, prob in [
+                (col1, "1 — Domicile",   res["home_prob"]),
+                (col2, "N — Nul",        res["draw_prob"]),
+                (col3, "2 — Extérieur",  res["away_prob"]),
+            ]:
+                col.markdown(f"""
+                <div class="prob-container">
+                  <div class="prob-label">{label}</div>
+                  <div class="prob-value">{prob}%</div>
+                  <div class="prob-bar-bg">
+                    <div class="prob-bar-fill" style="width:{prob}%;background:{_bar_color(prob)};"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
             st.markdown("---")
-            st.subheader("⚽ Marchés de buts")
+            st.markdown('<div class="section-header">⚽ Marchés de buts</div>', unsafe_allow_html=True)
             col4, col5, col6 = st.columns(3)
-            col4.metric("Score probable", score_str)
-            col5.metric("Over 2.5", f"{goal_markets['over25']}%")
-            col6.metric("BTTS", f"{goal_markets['btts']}%")
+            col4.markdown(f"""
+            <div class="prob-container">
+              <div class="prob-label">Score probable</div>
+              <div class="prob-value" style="font-size:1.2rem">{score_str}</div>
+            </div>""", unsafe_allow_html=True)
+            for col, label, prob in [
+                (col5, "Over 2.5", goal_markets["over25"]),
+                (col6, "BTTS",     goal_markets["btts"]),
+            ]:
+                col.markdown(f"""
+                <div class="prob-container">
+                  <div class="prob-label">{label}</div>
+                  <div class="prob-value">{prob}%</div>
+                  <div class="prob-bar-bg">
+                    <div class="prob-bar-fill" style="width:{prob}%;background:{_bar_color(prob)};"></div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
             st.markdown("---")
-            st.subheader("💰 Value Bet")
-            st.table({
-                "Marché":      ["1",         "N",         "2",         "1N",    "12",    "2N",    "Over 2.5",            "BTTS"],
-                "Modèle (%)":  [res["home_prob"], res["draw_prob"], res["away_prob"], prob_1n, prob_12, prob_2n, goal_markets["over25"], goal_markets["btts"]],
-                "Book (%)":    [v_home[1],   v_draw[1],   v_away[1],   v_1n[1], v_12[1], v_2n[1], v_over25[1],           v_btts[1]],
-                "Edge":        [v_home[2],   v_draw[2],   v_away[2],   v_1n[2], v_12[2], v_2n[2], v_over25[2],           v_btts[2]],
-                "Signal":      [v_home[0],   v_draw[0],   v_away[0],   v_1n[0], v_12[0], v_2n[0], v_over25[0],           v_btts[0]],
-            })
+            st.markdown('<div class="section-header">💰 Value Bet</div>', unsafe_allow_html=True)
+
+            vb_rows = [
+                ("1",        res["home_prob"], v_home[1],   v_home[2],   v_home[0]),
+                ("N",        res["draw_prob"], v_draw[1],   v_draw[2],   v_draw[0]),
+                ("2",        res["away_prob"], v_away[1],   v_away[2],   v_away[0]),
+                ("1N",       prob_1n,          v_1n[1],     v_1n[2],     v_1n[0]),
+                ("12",       prob_12,          v_12[1],     v_12[2],     v_12[0]),
+                ("2N",       prob_2n,          v_2n[1],     v_2n[2],     v_2n[0]),
+                ("Over 2.5", goal_markets["over25"], v_over25[1], v_over25[2], v_over25[0]),
+                ("BTTS",     goal_markets["btts"],   v_btts[1],   v_btts[2],   v_btts[0]),
+            ]
+            vb_html = '<table class="vb-table"><thead><tr>'
+            for h in ["Marché", "Modèle", "Book", "Edge", "Signal"]:
+                vb_html += f"<th>{h}</th>"
+            vb_html += "</tr></thead><tbody>"
+            for market, modele, book, edge, signal in vb_rows:
+                edge_cls = "edge-pos" if edge > 0 else ("edge-neg" if edge < 0 else "edge-neu")
+                edge_str = f"+{edge}%" if edge > 0 else f"{edge}%"
+                sig_cls  = "signal-value" if signal == "Value" else "signal-nv"
+                vb_html += (
+                    f"<tr>"
+                    f"<td><strong>{market}</strong></td>"
+                    f"<td>{modele}%</td>"
+                    f"<td>{book}%</td>"
+                    f'<td class="{edge_cls}">{edge_str}</td>'
+                    f'<td class="{sig_cls}">{signal}</td>'
+                    f"</tr>"
+                )
+            vb_html += "</tbody></table>"
+            st.markdown(vb_html, unsafe_allow_html=True)
 
             st.markdown("---")
-            st.subheader("🎯 Synthèse")
-            st.write(f"**Résultat le plus probable :** {res['prediction']} — {res['label']}")
-            st.write(f"**Pari le plus intéressant :** {format_market_label(best_financial[0])}")
-            st.write(f"**Verdict global :** {reco}")
-            st.write(f"**Indice de confiance :** {index} / 100")
+            st.markdown('<div class="section-header">🎯 Synthèse</div>', unsafe_allow_html=True)
+
+            conf_color = "#00c853" if index >= 60 else ("#f5a623" if index >= 40 else "#ff5252")
+            st.markdown(f"""
+            <div class="synthese-card">
+              <div class="synth-row">
+                <span class="synth-key">Résultat le plus probable</span>
+                <span class="synth-val accent">{res['prediction']} — {res['label']}</span>
+              </div>
+              <div class="synth-row">
+                <span class="synth-key">Meilleur marché</span>
+                <span class="synth-val gold">{format_market_label(best_financial[0])}</span>
+              </div>
+              <div class="synth-row">
+                <span class="synth-key">Verdict</span>
+                <span class="synth-val">{reco}</span>
+              </div>
+              <div class="synth-row" style="border-bottom:none;padding-bottom:0">
+                <span class="synth-key">Indice de confiance</span>
+                <span class="synth-val" style="color:{conf_color}">{index} / 100</span>
+              </div>
+              <div class="confidence-bar" style="margin-top:10px">
+                <div class="confidence-fill" style="width:{index}%;background:{conf_color}"></div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
 
             # --- Guide parieur ---
             st.markdown("---")
-            st.subheader("📋 Guide parieur")
+            st.markdown('<div class="section-header">📋 Guide parieur</div>', unsafe_allow_html=True)
 
             all_markets_guide = [
                 ("1",    "Victoire domicile",        res["home_prob"], v_home[2]),
@@ -475,49 +551,52 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             col_s, col_v = st.columns(2)
 
             with col_s:
-                st.markdown("**Le pari le plus sûr**")
-                st.info(
-                    f"**{safest[1]}**\n\n"
-                    f"Probabilité modèle : **{safest[2]}%**\n\n"
-                    f"C'est le résultat que le modèle juge le plus probable sur ce match. "
-                    f"Privilégiez ce marché si vous cherchez à limiter le risque."
-                )
+                col_s.markdown(f"""
+                <div class="guide-card safe">
+                  <div class="card-title">🛡️ Le pari le plus sûr</div>
+                  <div class="card-main">{safest[1]}</div>
+                  <div class="card-sub">Probabilité modèle : <strong>{safest[2]}%</strong><br>
+                  Le résultat que le modèle juge le plus probable. Privilégiez ce marché pour limiter le risque.</div>
+                </div>""", unsafe_allow_html=True)
 
             with col_v:
-                st.markdown("**Le pari le plus rentable**")
                 edge_val = most_valuable[3]
                 if edge_val > 0:
-                    st.success(
-                        f"**{most_valuable[1]}**\n\n"
-                        f"Edge : **+{edge_val}%** par rapport à la cote du bookmaker\n\n"
-                        f"C'est le marché où vous avez le plus grand avantage statistique. "
-                        f"Un edge positif signifie que le bookmaker sous-évalue ce résultat."
-                    )
+                    col_v.markdown(f"""
+                    <div class="guide-card value">
+                      <div class="card-title">💎 Le pari le plus rentable</div>
+                      <div class="card-main">{most_valuable[1]}</div>
+                      <div class="card-sub">Edge : <strong>+{edge_val}%</strong> vs le bookmaker<br>
+                      Le bookmaker sous-évalue ce résultat — avantage statistique maximal.</div>
+                    </div>""", unsafe_allow_html=True)
                 else:
-                    st.warning(
-                        f"**{most_valuable[1]}**\n\n"
-                        f"Edge : **{edge_val}%**\n\n"
-                        f"Aucun marché ne présente d'avantage net sur ce match. "
-                        f"Les cotes reflètent bien les probabilités — pariez avec prudence."
-                    )
+                    col_v.markdown(f"""
+                    <div class="guide-card warning">
+                      <div class="card-title">⚠️ Pari le plus rentable</div>
+                      <div class="card-main">{most_valuable[1]}</div>
+                      <div class="card-sub">Edge : <strong>{edge_val}%</strong><br>
+                      Aucun marché ne présente d'avantage net — pariez avec prudence.</div>
+                    </div>""", unsafe_allow_html=True)
 
-            st.markdown("**Combinaisons suggérées**")
             if combos:
-                combos_uniq = list(dict.fromkeys(combos))  # dédoublonnage ordre préservé
-                lines = "\n".join(f"- {c}" for c in combos_uniq[:6])
-                st.success(
-                    f"Les marchés suivants présentent tous un edge positif et peuvent être combinés :\n\n"
-                    + lines + "\n\n"
-                    "⚠️ En combiné, les probabilités se multiplient — assurez-vous que chaque sélection est solide individuellement avant de les assembler."
-                )
+                combos_uniq = list(dict.fromkeys(combos))
+                items = "".join(f"<li>{c}</li>" for c in combos_uniq[:6])
+                st.markdown(f"""
+                <div class="guide-card value" style="margin-top:10px">
+                  <div class="card-title">🔗 Combinaisons suggérées (edge positif)</div>
+                  <ul style="color:#b0bec5;margin:6px 0 4px 16px;font-size:0.88rem;line-height:1.8">{items}</ul>
+                  <div class="card-sub" style="margin-top:6px">⚠️ En combiné, les probabilités se multiplient — chaque sélection doit être solide individuellement.</div>
+                </div>""", unsafe_allow_html=True)
             else:
-                st.warning(
-                    "Aucune combinaison recommandée sur ce match : moins de deux marchés présentent un edge positif simultanément. "
-                    "Combiner des marchés sans edge vous désavantage statistiquement."
-                )
+                st.markdown("""
+                <div class="guide-card warning" style="margin-top:10px">
+                  <div class="card-title">🔗 Combinaisons</div>
+                  <div class="card-sub">Aucune combinaison recommandée : moins de deux marchés présentent un edge positif simultanément.
+                  Combiner sans edge vous désavantage statistiquement.</div>
+                </div>""", unsafe_allow_html=True)
 
             # Combinaison la plus en phase avec la réalité
-            st.markdown("**La combinaison la plus en phase avec la réalité**")
+            st.markdown('<div class="card-title" style="color:#90a4ae;font-size:0.78rem;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-top:14px;margin-bottom:6px">🎯 La combinaison la plus en phase avec la réalité</div>', unsafe_allow_html=True)
 
             # Résultat le plus probable (parmi 1/N/2)
             result_options = [
@@ -549,20 +628,22 @@ def render_common_analysis(home, away, key_prefix, competition_label):
 
             if len(realistic_parts) == 1:
                 combo_note = (
-                    f"Seul le résultat est clairement en faveur d'un scénario : "
-                    f"**{most_likely_result[1]}** ({most_likely_result[2]}%). "
-                    f"Les marchés de buts sont trop incertains (< 50%) pour enrichir la combinaison."
+                    f"Résultat clair : <strong>{most_likely_result[1]}</strong> ({most_likely_result[2]}%). "
+                    f"Les marchés de buts sont trop incertains (&lt;50%) pour enrichir la combinaison."
                 )
-                st.info(f"**{realistic_combo}**\n\n{combo_note}")
             else:
+                parts_desc = f"<strong>{most_likely_result[1]}</strong> ({most_likely_result[2]}%) + "
+                parts_desc += " + ".join(f"<strong>{label}</strong> ({prob}%)" for label, prob in likely_goal_markets)
                 combo_note = (
-                    f"Le modèle prédit **{most_likely_result[1]}** ({most_likely_result[2]}%) "
-                    + " et ".join(f"**{label}** ({prob}%)" for label, prob in likely_goal_markets)
-                    + f". Probabilité jointe estimée : **{joint_prob_pct}%**.\n\n"
-                    "Cette combinaison reflète le scénario jugé le plus cohérent avec l'ensemble des données — "
-                    "indépendamment de la valeur financière."
+                    parts_desc
+                    + f" — Proba jointe estimée : <strong>{joint_prob_pct}%</strong>.<br>"
+                    "Scénario le plus cohérent avec l'ensemble des données, indépendamment de la valeur financière."
                 )
-                st.info(f"**{realistic_combo}**\n\n{combo_note}")
+            st.markdown(f"""
+            <div class="guide-card safe">
+              <div class="card-main">{realistic_combo}</div>
+              <div class="card-sub">{combo_note}</div>
+            </div>""", unsafe_allow_html=True)
 
             rang_h = home.get("uefa_rank", home.get("fifa_rank", 0))
             rang_a = away.get("uefa_rank", away.get("fifa_rank", 0))
@@ -1055,7 +1136,306 @@ def render_analyse_tab():
 # ============================================================
 # MAIN
 # ============================================================
-st.title("⚽ Mode Parieur")
+
+# ---- CSS global ----
+st.markdown("""
+<style>
+/* ===== BASE — fond clair ===== */
+[data-testid="stAppViewContainer"] {
+    background: #f0f4f8;
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stMainBlockContainer"] { padding-top: 1rem; }
+
+/* ===== HEADER PRINCIPAL ===== */
+.betpredict-header {
+    background: linear-gradient(135deg, #0d3349 0%, #1a5c6e 50%, #0d3349 100%);
+    border-bottom: 4px solid #00b894;
+    padding: 18px 32px 14px 32px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.betpredict-header h1 {
+    color: #ffffff;
+    font-size: 1.9rem;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.betpredict-header .tagline {
+    color: #81ecec;
+    font-size: 0.82rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-top: 3px;
+}
+.betpredict-logo { font-size: 2.8rem; line-height: 1; }
+
+/* ===== SECTION HEADERS ===== */
+.section-header {
+    background: linear-gradient(90deg, #dff0f7 0%, #f0f4f8 100%);
+    border-left: 4px solid #0984e3;
+    padding: 8px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 20px 0 12px 0;
+    color: #0d3349;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* ===== TEAM HEADERS ===== */
+.team-header-home {
+    background: linear-gradient(135deg, #0d3349 0%, #0984e3 100%);
+    border-radius: 10px;
+    padding: 11px 16px;
+    text-align: center;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(9,132,227,0.3);
+}
+.team-header-away {
+    background: linear-gradient(135deg, #6c3483 0%, #e84393 100%);
+    border-radius: 10px;
+    padding: 11px 16px;
+    text-align: center;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    box-shadow: 0 2px 8px rgba(232,67,147,0.3);
+}
+
+/* ===== PROBABILITY BARS ===== */
+.prob-container {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 16px;
+    margin: 4px 0;
+    border: 1px solid #dfe6e9;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+.prob-label {
+    color: #636e72;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.prob-value {
+    color: #2d3436;
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+.prob-bar-bg {
+    background: #dfe6e9;
+    border-radius: 4px;
+    height: 7px;
+    margin-top: 9px;
+    overflow: hidden;
+}
+.prob-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+}
+
+/* ===== VALUE BET TABLE ===== */
+.vb-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 0.88rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.vb-table th {
+    background: #0d3349;
+    color: #b2bec3;
+    font-weight: 700;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 14px;
+    text-align: left;
+}
+.vb-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid #f0f4f8;
+    color: #2d3436;
+    font-weight: 500;
+}
+.vb-table tr:last-child td { border-bottom: none; }
+.vb-table tr:hover td { background: #f8fbff; }
+.edge-pos { color: #00b894; font-weight: 700; }
+.edge-neg { color: #d63031; font-weight: 700; }
+.edge-neu { color: #636e72; }
+.signal-value { color: #0984e3; font-weight: 700; }
+.signal-nv    { color: #d63031; font-weight: 700; }
+
+/* ===== SYNTHESE CARD ===== */
+.synthese-card {
+    background: #ffffff;
+    border: 2px solid #00b894;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 12px 0;
+    box-shadow: 0 2px 12px rgba(0,184,148,0.12);
+}
+.synthese-card .synth-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid #f0f4f8;
+}
+.synthese-card .synth-row:last-child { border-bottom: none; }
+.synthese-card .synth-key {
+    color: #636e72;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+.synthese-card .synth-val {
+    color: #2d3436;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+.synthese-card .synth-val.accent { color: #0984e3; }
+.synthese-card .synth-val.gold   { color: #e17055; }
+
+/* ===== CONFIDENCE BAR ===== */
+.confidence-bar {
+    background: #dfe6e9;
+    border-radius: 6px;
+    height: 10px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+.confidence-fill {
+    height: 100%;
+    border-radius: 6px;
+}
+
+/* ===== GUIDE CARDS ===== */
+.guide-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin: 6px 0;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+}
+.guide-card.safe {
+    background: #eafaf6;
+    border: 1px solid #00b894;
+}
+.guide-card.value {
+    background: #eaf4ff;
+    border: 1px solid #0984e3;
+}
+.guide-card.warning {
+    background: #fff8ee;
+    border: 1px solid #fdcb6e;
+}
+.guide-card .card-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.guide-card.safe    .card-title { color: #00b894; }
+.guide-card.value   .card-title { color: #0984e3; }
+.guide-card.warning .card-title { color: #e17055; }
+.guide-card .card-main {
+    color: #2d3436;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+.guide-card .card-sub {
+    color: #636e72;
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+/* ===== TABS ===== */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: #ffffff;
+    border-radius: 10px 10px 0 0;
+    gap: 4px;
+    padding: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent;
+    color: #636e72;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 0.88rem;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: #0d3349 !important;
+    color: #ffffff !important;
+}
+
+/* ===== BOUTON ANALYSER ===== */
+[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #0d3349 0%, #0984e3 100%);
+    color: #ffffff;
+    font-weight: 800;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    letter-spacing: 0.5px;
+    padding: 10px 28px;
+    transition: opacity 0.2s;
+    box-shadow: 0 2px 8px rgba(9,132,227,0.3);
+}
+[data-testid="stButton"] > button:hover { opacity: 0.88; }
+
+/* ===== METRICS ===== */
+[data-testid="stMetric"] {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 14px !important;
+    border: 1px solid #dfe6e9;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+[data-testid="stMetricLabel"] { color: #636e72 !important; }
+[data-testid="stMetricValue"] { color: #2d3436 !important; font-weight: 800 !important; }
+[data-testid="stMetricDelta"] { color: #00b894 !important; }
+
+/* ===== DIVIDER ===== */
+hr { border-color: #dfe6e9 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ---- Header principal ----
+st.markdown("""
+<div class="betpredict-header">
+  <div class="betpredict-logo">⚽</div>
+  <div>
+    <h1>BetPredict Pro</h1>
+    <div class="tagline">Analyse statistique &amp; aide à la décision</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["🏟️ Clubs", "🌍 Sélections internationales", "📊 Analyse"])
 

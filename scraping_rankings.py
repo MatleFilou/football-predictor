@@ -97,10 +97,10 @@ def _match_name(query: str, candidate: str) -> bool:
         if not alternatives:
             continue
         if _word_boundary_match(alias_key, c):
-            if q in alternatives or any(a in q or q in a for a in alternatives):
+            if q in alternatives or alias_key in q:
                 return True
         if _word_boundary_match(alias_key, q):
-            if c in alternatives or any(a in c or c in a for a in alternatives):
+            if c in alternatives or alias_key in c:
                 return True
 
     # Correspondance par préfixe de mots (3 chars) → gère München/Munich, etc.
