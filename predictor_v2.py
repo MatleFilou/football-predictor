@@ -190,17 +190,47 @@ def predict_match(home, away):
 # ---------------------------------------------------------------------------
 # Indice de confiance — échelle 0 à 100
 #
-# Basé sur la probabilité du résultat le plus probable.
-# Un match à 3 issues équiprobables (33% chacune) donne 0.
-# Un résultat à 100% de probabilité donne 100.
-#
-# Formule : indice = (prob_max - 1/3) / (2/3) × 100
-# → ramène la plage [33%…100%] sur [0…100]
+# Composantes :
+#   1. Score de base   : prob_max ramenée sur [33%…68%] → [0…100]
+#      (68% est un plafond réaliste en football, rares sont les matchs
+#       où une issue dépasse cette probabilité)
+#   2. Bonus écart     : plus le favori écrase les autres issues, plus
+#      l'indice monte (max +15 pts)
+#   3. Malus données   : peu de matchs (<5) → moins fiable (-8 à -15)
+#   4. Malus classement: aucun ranking disponible pour les deux équipes
+#      → le modèle dispose de moins d'information (-10)
 # ---------------------------------------------------------------------------
 
 def confidence_index(res, home=None, away=None):
-    prob_max = max(res["home_prob"], res["draw_prob"], res["away_prob"])
-    indice = (prob_max - 1/3) / (2/3) * 100
+    probs = [res["home_prob"], res["draw_prob"], res["away_prob"]]
+    prob_max  = max(probs)
+    prob_sorted = sorted(probs, reverse=True)
+
+    # 1. Score de base : [33.3%…68%] → [0…100]
+    base = (prob_max - 33.33) / (68.0 - 33.33) * 100
+    base = max(0.0, min(100.0, base))
+
+    # 2. Bonus écart entre 1er et 2ème (max +15)
+    gap       = prob_sorted[0] - prob_sorted[1]
+    gap_bonus = min(15.0, gap * 0.9)
+
+    # 3. Malus données insuffisantes
+    data_malus = 0.0
+    if home and away:
+        nb_h = home["wins"] + home["draws"] + home["losses"]
+        nb_a = away["wins"] + away["draws"] + away["losses"]
+        if nb_h < 4 or nb_a < 4:
+            data_malus += 15.0
+        elif nb_h < 6 or nb_a < 6:
+            data_malus += 8.0
+
+        # 4. Malus classement absent pour les deux équipes
+        rank_h = home.get("uefa_rank", home.get("fifa_rank", 0))
+        rank_a = away.get("uefa_rank", away.get("fifa_rank", 0))
+        if rank_h == 0 and rank_a == 0:
+            data_malus += 10.0
+
+    indice = base + gap_bonus - data_malus
     return round(max(0, min(100, indice)))
 
 
