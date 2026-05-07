@@ -280,10 +280,14 @@ def calculate_goal_markets(home_goals_avg, away_goals_avg, max_goals=10):
 # ---------------------------------------------------------------------------
 
 def implied_prob(odd):
+    if not odd or odd <= 1.0:
+        return 0.0
     return round(100 / odd, 1)
 
 
 def value_bet(model_prob, odd):
+    if not odd or odd <= 1.0:
+        return "—", 0.0, 0.0
     book  = implied_prob(odd)
     edge  = round(model_prob - book, 1)
     if edge > 10:

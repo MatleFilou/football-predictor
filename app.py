@@ -328,23 +328,23 @@ def render_common_analysis(home, away, key_prefix, competition_label):
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        odd_home = st.number_input("Cote 1", min_value=1.01, value=2.00, key=f"{key_prefix}_odd_1")
+        odd_home = st.number_input("Cote 1", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_1")
     with c2:
-        odd_draw = st.number_input("Cote N", min_value=1.01, value=3.20, key=f"{key_prefix}_odd_n")
+        odd_draw = st.number_input("Cote N", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_n")
     with c3:
-        odd_away = st.number_input("Cote 2", min_value=1.01, value=2.00, key=f"{key_prefix}_odd_2")
+        odd_away = st.number_input("Cote 2", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_2")
 
     c4, c5, c6, c7, c8 = st.columns(5)
     with c4:
-        odd_1n = st.number_input("Cote 1N", min_value=1.01, value=1.40, key=f"{key_prefix}_odd_1n")
+        odd_1n = st.number_input("Cote 1N", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_1n")
     with c5:
-        odd_12 = st.number_input("Cote 12", min_value=1.01, value=1.40, key=f"{key_prefix}_odd_12")
+        odd_12 = st.number_input("Cote 12", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_12")
     with c6:
-        odd_2n = st.number_input("Cote 2N", min_value=1.01, value=1.60, key=f"{key_prefix}_odd_2n")
+        odd_2n = st.number_input("Cote 2N", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_2n")
     with c7:
-        odd_over25 = st.number_input("Cote Over 2.5", min_value=1.01, value=1.90, key=f"{key_prefix}_odd_o25")
+        odd_over25 = st.number_input("Cote Over 2.5", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_o25")
     with c8:
-        odd_btts = st.number_input("Cote BTTS", min_value=1.01, value=1.85, key=f"{key_prefix}_odd_btts")
+        odd_btts = st.number_input("Cote BTTS", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_btts")
 
     if st.button("🔍 Analyser", key=f"{key_prefix}_analyse"):
         try:
@@ -497,7 +497,7 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 <span class="synth-val">{reco}</span>
               </div>
               <div class="synth-row" style="border-bottom:none;padding-bottom:0">
-                <span class="synth-key">Indice de confiance</span>
+                <span class="synth-key">Indice de confiance (résultat le plus probable)</span>
                 <span class="synth-val" style="color:{conf_color}">{index} / 100</span>
               </div>
               <div class="confidence-bar" style="margin-top:10px">
@@ -803,7 +803,7 @@ def _save_historique(df: pd.DataFrame):
 ANALYSE_PATH = "analyse_manuelle.csv"
 ANALYSE_COLUMNS = [
     "date", "competition", "equipe_domicile", "equipe_exterieur",
-    "prediction", "meilleur_marche", "pari_realise", "score_reel",
+    "prediction", "meilleur_marche", "pari_realise", "cote", "score_reel",
 ]
 
 MARKET_OPTIONS = ["", "1", "N", "2", "1N", "12", "2N", "Over 2.5", "BTTS"]
@@ -890,6 +890,14 @@ def render_analyse_tab():
                 "Pari(s) réalisé(s)",
                 help="Ex : 1  /  Over 2.5  /  1 + BTTS  /  2 + Over 2.5",
                 width="medium",
+            ),
+            "cote": st.column_config.NumberColumn(
+                "Cote",
+                help="Cote du pari réalisé",
+                min_value=1.0,
+                step=0.05,
+                format="%.2f",
+                width="small",
             ),
             "score_reel": st.column_config.TextColumn(
                 "Score réel",
