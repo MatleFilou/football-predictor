@@ -301,12 +301,24 @@ def value_bet(model_prob, odd):
     return label, book, edge
 
 
-def final_reco(index, edge):
-    if index > 65 and edge > 5:
-        return "🔥 PARI FORT"
-    elif index > 55 and edge > 0:
-        return "✅ BON PARI"
-    elif index > 45:
-        return "⚠️ PRUDENCE"
+def final_reco(index, edge=None):
+    if index >= 65:
+        return "🔥 FORTE CONFIANCE"
+    elif index >= 50:
+        return "✅ BONNE CONFIANCE"
+    elif index >= 35:
+        return "⚠️ CONFIANCE MODÉRÉE"
     else:
-        return "❌ A EVITER"
+        return "❌ MATCH INCERTAIN"
+
+
+def value_signal(edge):
+    """Signal value séparé, uniquement affiché quand les cotes sont renseignées."""
+    if edge > 10:
+        return "🔥 GROS VALUE"
+    elif edge > 5:
+        return "✅ VALUE"
+    elif edge > 0:
+        return "👍 Léger value"
+    else:
+        return "❌ Pas de value"

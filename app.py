@@ -21,6 +21,7 @@ from predictor_v2 import (
     predict_match,
     predict_scores,
     value_bet,
+    value_signal,
 )
 
 st.set_page_config(page_title="BetPredict Pro", page_icon="⚽", layout="wide")
@@ -481,7 +482,20 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             st.markdown("---")
             st.markdown('<div class="section-header">🎯 Synthèse</div>', unsafe_allow_html=True)
 
-            conf_color = "#00c853" if index >= 60 else ("#f5a623" if index >= 40 else "#ff5252")
+            conf_color = "#00b894" if index >= 65 else ("#0984e3" if index >= 50 else ("#f5a623" if index >= 35 else "#d63031"))
+
+            # Signal value : uniquement si au moins une cote est renseignée
+            cotes_renseignees = any(o > 1.0 for o in [odd_home, odd_draw, odd_away, odd_1n, odd_12, odd_2n, odd_over25, odd_btts])
+            best_edge = best_financial[2][2] if cotes_renseignees else None
+            signal_html = ""
+            if cotes_renseignees and best_edge is not None:
+                sig = value_signal(best_edge)
+                signal_html = f"""
+              <div class="synth-row">
+                <span class="synth-key">Signal value (meilleur marché)</span>
+                <span class="synth-val">{sig}</span>
+              </div>"""
+
             st.markdown(f"""
             <div class="synthese-card">
               <div class="synth-row">
@@ -494,8 +508,8 @@ def render_common_analysis(home, away, key_prefix, competition_label):
               </div>
               <div class="synth-row">
                 <span class="synth-key">Verdict</span>
-                <span class="synth-val">{reco}</span>
-              </div>
+                <span class="synth-val" style="color:{conf_color}">{reco}</span>
+              </div>{signal_html}
               <div class="synth-row" style="border-bottom:none;padding-bottom:0">
                 <span class="synth-key">Indice de confiance (résultat le plus probable)</span>
                 <span class="synth-val" style="color:{conf_color}">{index} / 100</span>
