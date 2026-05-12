@@ -32,20 +32,32 @@ HISTORIQUE_PATH = "historique.csv"
 HISTORIQUE_COLUMNS = [
     "date", "competition",
     "equipe_domicile", "equipe_exterieur",
+    # Forme domicile
     "wins_h", "draws_h", "losses_h", "goals_scored_h", "goals_conceded_h",
     "max_goals_player_h", "max_assists_player_h",
-    "top_scorer_present_h", "top_assist_present_h", "rang_h",
+    "top_scorer_status_h", "top_assist_status_h",
+    "season_goals_scorer_h", "season_scorer_status_h", "rang_h",
+    # Forme extérieur
     "wins_a", "draws_a", "losses_a", "goals_scored_a", "goals_conceded_a",
     "max_goals_player_a", "max_assists_player_a",
-    "top_scorer_present_a", "top_assist_present_a", "rang_a",
-    "cote_1", "cote_n", "cote_2", "cote_over25", "cote_btts",
+    "top_scorer_status_a", "top_assist_status_a",
+    "season_goals_scorer_a", "season_scorer_status_a", "rang_a",
+    # Cotes
+    "cote_1", "cote_n", "cote_2", "cote_over15", "cote_over25", "cote_btts",
+    # Probabilités & marchés de buts
     "prob_domicile", "prob_nul", "prob_exterieur",
-    "prediction", "indice_confiance",
-    "score_probable", "over25_pct", "btts_pct",
+    "over15_pct", "over25_pct", "btts_pct",
+    # Prédictions
+    "prediction", "indice_confiance", "score_probable",
+    # Paris sûrs (résultat + buts)
+    "pari_sur_resultat", "pari_sur_buts",
+    # Value bets
     "value_1", "edge_1", "value_n", "edge_n", "value_2", "edge_2",
-    "value_over25", "edge_over25", "value_btts", "edge_btts",
-    "meilleur_marche", "verdict",
-    "pari_realise", "resultat_reel", "score_reel",
+    "value_over15", "edge_over15", "value_over25", "edge_over25",
+    "value_btts", "edge_btts",
+    "verdict",
+    # Suivi post-match
+    "pari_realise", "score_reel",
 ]
 
 def init_historique():
@@ -766,32 +778,48 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 "competition": competition_label,
                 "equipe_domicile": home_name,
                 "equipe_exterieur": away_name,
+                # Forme domicile
                 "wins_h": home["wins"], "draws_h": home["draws"], "losses_h": home["losses"],
                 "goals_scored_h": home["goals_scored"], "goals_conceded_h": home["goals_conceded"],
                 "max_goals_player_h": home["max_goals_by_player"],
                 "max_assists_player_h": home["max_assists_by_player"],
-                "top_scorer_present_h": home["top_scorer_present"],
-                "top_assist_present_h": home["top_assist_present"], "rang_h": rang_h,
+                "top_scorer_status_h": home["top_scorer_present"],
+                "top_assist_status_h": home["top_assist_present"],
+                "season_goals_scorer_h": home.get("season_goals_scorer", ""),
+                "season_scorer_status_h": home.get("season_scorer_present", ""), "rang_h": rang_h,
+                # Forme extérieur
                 "wins_a": away["wins"], "draws_a": away["draws"], "losses_a": away["losses"],
                 "goals_scored_a": away["goals_scored"], "goals_conceded_a": away["goals_conceded"],
                 "max_goals_player_a": away["max_goals_by_player"],
                 "max_assists_player_a": away["max_assists_by_player"],
-                "top_scorer_present_a": away["top_scorer_present"],
-                "top_assist_present_a": away["top_assist_present"], "rang_a": rang_a,
+                "top_scorer_status_a": away["top_scorer_present"],
+                "top_assist_status_a": away["top_assist_present"],
+                "season_goals_scorer_a": away.get("season_goals_scorer", ""),
+                "season_scorer_status_a": away.get("season_scorer_present", ""), "rang_a": rang_a,
+                # Cotes
                 "cote_1": odd_home, "cote_n": odd_draw, "cote_2": odd_away,
-                "cote_over25": odd_over25, "cote_btts": odd_btts,
+                "cote_over15": odd_over15, "cote_over25": odd_over25, "cote_btts": odd_btts,
+                # Probabilités
                 "prob_domicile": res["home_prob"], "prob_nul": res["draw_prob"],
                 "prob_exterieur": res["away_prob"],
+                "over15_pct": goal_markets["over15"],
+                "over25_pct": goal_markets["over25"], "btts_pct": goal_markets["btts"],
+                # Prédictions
                 "prediction": res["prediction"], "indice_confiance": index,
                 "score_probable": score_str,
-                "over25_pct": goal_markets["over25"], "btts_pct": goal_markets["btts"],
+                # Paris sûrs
+                "pari_sur_resultat": safest_result[0],
+                "pari_sur_buts": safest_goals[0],
+                # Value bets
                 "value_1": v_home[0], "edge_1": v_home[2],
                 "value_n": v_draw[0], "edge_n": v_draw[2],
                 "value_2": v_away[0], "edge_2": v_away[2],
+                "value_over15": v_over15[0], "edge_over15": v_over15[2],
                 "value_over25": v_over25[0], "edge_over25": v_over25[2],
                 "value_btts": v_btts[0], "edge_btts": v_btts[2],
-                "meilleur_marche": safest[0], "verdict": reco,
-                "pari_realise": "", "resultat_reel": "", "score_reel": "",
+                "verdict": reco,
+                # Suivi post-match
+                "pari_realise": "", "score_reel": "",
             })
             st.success("✅ Analyse sauvegardée dans historique.csv")
             if os.path.exists(HISTORIQUE_PATH):
@@ -921,10 +949,17 @@ def _save_historique(df: pd.DataFrame):
 ANALYSE_PATH = "analyse_manuelle.csv"
 ANALYSE_COLUMNS = [
     "date", "competition", "equipe_domicile", "equipe_exterieur",
-    "prediction", "meilleur_marche", "pari_realise", "cote", "score_reel",
+    "prediction",
+    "pari_sur_resultat",
+    "pari_sur_buts",
+    "pari_realise",
+    "cote",
+    "score_reel",
 ]
 
 MARKET_OPTIONS = ["", "1", "N", "2", "1N", "12", "2N", "Over 1.5", "Over 2.5", "BTTS"]
+RESULT_OPTIONS = ["", "1", "N", "2", "1N", "12", "2N"]
+GOAL_OPTIONS   = ["", "Over 1.5", "Over 2.5", "BTTS"]
 
 
 def _load_analyse() -> pd.DataFrame:
@@ -999,9 +1034,16 @@ def render_analyse_tab():
                 help="Résultat le plus probable donné par l'outil",
                 width="small",
             ),
-            "meilleur_marche": st.column_config.TextColumn(
-                "Meilleur(s) marché(s)",
-                help="Ex : 1  /  Over 2.5  /  1 + Over 2.5  (n°1 + n°2 de l'outil)",
+            "pari_sur_resultat": st.column_config.SelectboxColumn(
+                "🛡️ Pari sûr — Résultat",
+                options=RESULT_OPTIONS,
+                help="Meilleur pari sûr résultat suggéré par l'outil (1/N/2/1N/12/2N)",
+                width="medium",
+            ),
+            "pari_sur_buts": st.column_config.SelectboxColumn(
+                "⚽ Pari sûr — Buts",
+                options=GOAL_OPTIONS,
+                help="Meilleur pari sûr buts suggéré par l'outil (Over 1.5 / Over 2.5 / BTTS)",
                 width="medium",
             ),
             "pari_realise": st.column_config.TextColumn(
@@ -1053,15 +1095,17 @@ def render_analyse_tab():
         return
 
     df_known["resultat_reel"] = df_known["score_reel"].apply(lambda s: _score_to_result(s) or "")
-    df_known["pred_ok"]       = df_known.apply(
+    df_known["pred_ok"]  = df_known.apply(
         lambda r: bool(_market_won(r["prediction"], r["score_reel"])) if r["prediction"] else False, axis=1
     )
-    df_known["meilleur_ok"]   = df_known.apply(
-        lambda r: _any_market_won(r["meilleur_marche"], r["score_reel"]), axis=1
+    df_known["sur_res_ok"] = df_known.apply(
+        lambda r: _market_won(r["pari_sur_resultat"], r["score_reel"]) if str(r.get("pari_sur_resultat", "")).strip() else None, axis=1
     )
-    df_known["pari_ok"]       = df_known.apply(
-        lambda r: _combo_won(r["pari_realise"], r["score_reel"]),
-        axis=1,
+    df_known["sur_buts_ok"] = df_known.apply(
+        lambda r: _market_won(r["pari_sur_buts"], r["score_reel"]) if str(r.get("pari_sur_buts", "")).strip() else None, axis=1
+    )
+    df_known["pari_ok"] = df_known.apply(
+        lambda r: _combo_won(r["pari_realise"], r["score_reel"]), axis=1
     )
 
     n_total = len(df_known)
@@ -1070,64 +1114,79 @@ def render_analyse_tab():
     st.subheader("📈 Statistiques globales")
 
     pred_ok_n       = int(df_known["pred_ok"].sum())
-    meilleur_series = df_known["meilleur_ok"].dropna()
-    meilleur_ok_n   = int(meilleur_series.sum())
-    meilleur_denom  = len(meilleur_series)
+    sur_res_series  = df_known["sur_res_ok"].dropna()
+    sur_res_ok_n    = int(sur_res_series.sum())
+    sur_res_denom   = len(sur_res_series)
+    sur_buts_series = df_known["sur_buts_ok"].dropna()
+    sur_buts_ok_n   = int(sur_buts_series.sum())
+    sur_buts_denom  = len(sur_buts_series)
     pari_series     = df_known["pari_ok"].dropna()
     pari_ok_n       = int(pari_series.sum())
     pari_denom      = len(pari_series)
 
-    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
     col_s1.metric("Matchs renseignés", n_total)
     col_s2.metric(
-        "Résultat le plus probable correct",
+        "Résultat probable correct",
         f"{round(pred_ok_n / n_total * 100, 1)}%" if n_total else "—",
         f"{pred_ok_n}/{n_total}",
     )
     col_s3.metric(
-        "Meilleur marché gagnant",
-        f"{round(meilleur_ok_n / meilleur_denom * 100, 1)}%" if meilleur_denom else "—",
-        f"{meilleur_ok_n}/{meilleur_denom}" if meilleur_denom else "",
+        "🛡️ Pari sûr résultat gagnant",
+        f"{round(sur_res_ok_n / sur_res_denom * 100, 1)}%" if sur_res_denom else "—",
+        f"{sur_res_ok_n}/{sur_res_denom}" if sur_res_denom else "",
     )
     col_s4.metric(
+        "⚽ Pari sûr buts gagnant",
+        f"{round(sur_buts_ok_n / sur_buts_denom * 100, 1)}%" if sur_buts_denom else "—",
+        f"{sur_buts_ok_n}/{sur_buts_denom}" if sur_buts_denom else "",
+    )
+    col_s5.metric(
         "Pari réalisé gagnant",
         f"{round(pari_ok_n / pari_denom * 100, 1)}%" if pari_denom else "—",
         f"{pari_ok_n}/{pari_denom}" if pari_denom else "",
     )
 
     # ----------------------------------------------------------------
-    # Section 3 : performance par marché prédit
+    # Section 3 : performance par marché (paris sûrs de l'outil)
     # ----------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🎯 Performance par marché prédit (meilleur marché de l'outil)")
+    st.subheader("🎯 Performance des paris sûrs suggérés par l'outil")
 
-    # Explose les entrées multi-marchés pour compter chaque marché individuellement
-    market_rows = []
-    for _, row in df_known.iterrows():
-        markets = [m.strip() for m in re.split(r"[+,]", str(row["meilleur_marche"])) if m.strip()]
-        for m in markets:
-            market_rows.append({"market": m, "score_reel": row["score_reel"]})
+    def _market_stats_for_col(col_name, markets_list):
+        stats = []
+        for market in markets_list:
+            subset = df_known[df_known[col_name].apply(lambda v: str(v).strip()) == market]
+            if subset.empty:
+                continue
+            wins = subset["score_reel"].apply(lambda s: _market_won(market, s))
+            wins_known = wins.dropna()
+            if wins_known.empty:
+                continue
+            stats.append({
+                "Marché": format_market_label(market),
+                "Suggestions": len(subset),
+                "Gagnant": int(wins_known.sum()),
+                "Taux réussite": f"{round(wins_known.sum() / len(wins_known) * 100, 1)}%",
+            })
+        return stats
 
-    market_stats = []
-    for market in ["1", "N", "2", "1N", "12", "2N", "Over 1.5", "Over 2.5", "BTTS"]:
-        subset = [r for r in market_rows if r["market"] == market]
-        if not subset:
-            continue
-        wins = [_market_won(market, r["score_reel"]) for r in subset]
-        wins_known = [w for w in wins if w is not None]
-        if not wins_known:
-            continue
-        market_stats.append({
-            "Marché": format_market_label(market),
-            "Prédictions": len(subset),
-            "Gagnant": int(sum(wins_known)),
-            "Taux réussite": f"{round(sum(wins_known) / len(wins_known) * 100, 1)}%",
-        })
+    col_tab1, col_tab2 = st.columns(2)
+    with col_tab1:
+        st.markdown("**🛡️ Pari sûr — Résultat**")
+        res_stats = _market_stats_for_col("pari_sur_resultat", ["1", "N", "2", "1N", "12", "2N"])
+        if res_stats:
+            st.dataframe(pd.DataFrame(res_stats), use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucune donnée de pari sûr résultat.")
 
-    if market_stats:
-        st.dataframe(pd.DataFrame(market_stats), use_container_width=True, hide_index=True)
-    else:
-        st.info("Renseignez la colonne 'Meilleur marché' pour voir cette analyse.")
+    with col_tab2:
+        st.markdown("**⚽ Pari sûr — Buts**")
+        buts_stats = _market_stats_for_col("pari_sur_buts", ["Over 1.5", "Over 2.5", "BTTS"])
+        if buts_stats:
+            st.dataframe(pd.DataFrame(buts_stats), use_container_width=True, hide_index=True)
+        else:
+            st.info("Aucune donnée de pari sûr buts.")
 
     # ----------------------------------------------------------------
     # Section 4 : analyse statistique et fiabilité
@@ -1138,12 +1197,12 @@ def render_analyse_tab():
     if n_total < 3:
         st.info("Ajoutez au minimum 3 matchs avec score réel pour générer l'analyse.")
     else:
+        import math
+
         # --- Fiabilité du résultat le plus probable ---
         st.markdown("**Résultat le plus probable — fiabilité globale**")
         taux_pred = pred_ok_n / n_total * 100
 
-        # Intervalle de confiance approximatif (Wilson simplifié)
-        import math
         z = 1.96
         p = pred_ok_n / n_total
         margin = z * math.sqrt(p * (1 - p) / n_total) * 100
@@ -1169,12 +1228,12 @@ def render_analyse_tab():
 
         # Détail par type de résultat prédit
         res_types = [
-            ("1",  "Victoire domicile",    lambda r: r == "1"),
-            ("N",  "Nul",                  lambda r: r == "N"),
-            ("2",  "Victoire extérieur",   lambda r: r == "2"),
-            ("1N", "Domicile ou nul",      lambda r: r in ("1", "N")),
-            ("12", "Domicile ou extérieur",lambda r: r in ("1", "2")),
-            ("2N", "Extérieur ou nul",     lambda r: r in ("2", "N")),
+            ("1",  "Victoire domicile",     lambda r: r == "1"),
+            ("N",  "Nul",                   lambda r: r == "N"),
+            ("2",  "Victoire extérieur",    lambda r: r == "2"),
+            ("1N", "Domicile ou nul",       lambda r: r in ("1", "N")),
+            ("12", "Domicile ou extérieur", lambda r: r in ("1", "2")),
+            ("2N", "Extérieur ou nul",      lambda r: r in ("2", "N")),
         ]
         rows_res = []
         for code, label, check_fn in res_types:
@@ -1194,49 +1253,52 @@ def render_analyse_tab():
         if rows_res:
             st.dataframe(pd.DataFrame(rows_res), use_container_width=True, hide_index=True)
 
-        # --- Fiabilité par marché (meilleur marché suggéré) ---
-        if market_stats:
-            st.markdown("**Marchés suggérés — classement par fiabilité**")
-            df_mkt = pd.DataFrame(market_stats).copy()
+        # --- Fiabilité des paris sûrs (résultat + buts) ---
+        all_safe_stats = res_stats + buts_stats
+        if all_safe_stats:
+            st.markdown("**Paris sûrs suggérés — classement par fiabilité**")
+            df_mkt = pd.DataFrame(all_safe_stats).copy()
             df_mkt["_taux_num"] = df_mkt["Taux réussite"].str.replace("%", "").astype(float)
             df_mkt["Fiabilité"] = df_mkt["_taux_num"].apply(
                 lambda t: "✅ Fiable" if t >= 60 else ("⚠️ Moyen" if t >= 40 else "❌ Faible")
             )
-            df_mkt["Échantillon"] = df_mkt["Prédictions"].apply(
+            df_mkt["Échantillon"] = df_mkt["Suggestions"].apply(
                 lambda n: "⚠️ Faible (<5)" if n < 5 else ("Moyen (5-10)" if n < 10 else "Solide (≥10)")
             )
             df_mkt = df_mkt.sort_values("_taux_num", ascending=False).drop(columns=["_taux_num"])
             st.dataframe(df_mkt, use_container_width=True, hide_index=True)
 
-            best = max(market_stats, key=lambda x: float(x["Taux réussite"].replace("%", "")))
-            worst = min(market_stats, key=lambda x: float(x["Taux réussite"].replace("%", "")))
+            best  = max(all_safe_stats, key=lambda x: float(x["Taux réussite"].replace("%", "")))
+            worst = min(all_safe_stats, key=lambda x: float(x["Taux réussite"].replace("%", "")))
 
             col_b1, col_b2 = st.columns(2)
             col_b1.metric(
                 "Marché le plus fiable",
                 best["Marché"],
-                f"{best['Taux réussite']} sur {best['Prédictions']} matchs",
+                f"{best['Taux réussite']} sur {best['Suggestions']} matchs",
             )
-            if len(market_stats) > 1:
+            if len(all_safe_stats) > 1:
                 col_b2.metric(
                     "Marché le moins fiable",
                     worst["Marché"],
-                    f"{worst['Taux réussite']} sur {worst['Prédictions']} matchs",
+                    f"{worst['Taux réussite']} sur {worst['Suggestions']} matchs",
                     delta_color="inverse",
                 )
 
-        # --- Comparaison : meilleur marché outil vs pari réalisé ---
-        if meilleur_denom >= 3 and pari_denom >= 3:
-            st.markdown("**Suggestions outil vs Paris réalisés**")
-            taux_meilleur = round(meilleur_ok_n / meilleur_denom * 100, 1)
-            taux_pari     = round(pari_ok_n / pari_denom * 100, 1)
-            diff = taux_pari - taux_meilleur
+        # --- Comparaison : paris sûrs outil vs paris réalisés ---
+        total_safe = sur_res_denom + sur_buts_denom
+        total_safe_ok = sur_res_ok_n + sur_buts_ok_n
+        if total_safe >= 3 and pari_denom >= 3:
+            st.markdown("**Paris sûrs outil vs Paris réalisés**")
+            taux_outil = round(total_safe_ok / total_safe * 100, 1)
+            taux_pari  = round(pari_ok_n / pari_denom * 100, 1)
+            diff = taux_pari - taux_outil
 
             col_c1, col_c2 = st.columns(2)
             col_c1.metric(
-                "Meilleur marché outil",
-                f"{taux_meilleur}%",
-                f"{meilleur_ok_n}/{meilleur_denom} gagnants",
+                "Paris sûrs outil (résultat + buts)",
+                f"{taux_outil}%",
+                f"{total_safe_ok}/{total_safe} gagnants",
             )
             col_c2.metric(
                 "Paris réalisés",
@@ -1248,12 +1310,12 @@ def render_analyse_tab():
             if abs(diff) >= 5:
                 if diff > 0:
                     st.markdown(
-                        f"> Vos paris réalisés ({taux_pari}%) surpassent les suggestions de l'outil ({taux_meilleur}%) "
+                        f"> Vos paris réalisés ({taux_pari}%) surpassent les suggestions de l'outil ({taux_outil}%) "
                         f"de **{round(diff, 1)} points**. Votre sélection personnelle apporte de la valeur."
                     )
                 else:
                     st.markdown(
-                        f"> Les suggestions de l'outil ({taux_meilleur}%) surpassent vos paris réalisés ({taux_pari}%) "
+                        f"> Les paris sûrs de l'outil ({taux_outil}%) surpassent vos paris réalisés ({taux_pari}%) "
                         f"de **{round(-diff, 1)} points**. Suivre l'outil plus fidèlement serait plus rentable."
                     )
 
