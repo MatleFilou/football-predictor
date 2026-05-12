@@ -363,9 +363,27 @@ def compute_safety_score(market_code: str, prob: float, home: dict, away: dict) 
             + scorer_bonus * 0.10
         )
 
+    def _offensive_factor(team: dict) -> float:
+        """
+        Capacité offensive fiable : buts marqués normalisés × fiabilité des
+        buteurs (buteur 5 matchs + buteur de la saison).
+        Utilisé pour évaluer la sécurité des marchés de buts (BTTS, Over 2.5).
+        """
+        goals_avg    = team.get("goals_scored", 1.0)
+        scorer_coef  = _status_coef(team.get("top_scorer_present", True))
+        season_goals = team.get("season_goals_scorer", 0)
+        season_coef  = _status_coef(team.get("season_scorer_present", True))
+        goals_norm   = min(goals_avg / 2.5, 1.0)
+        # Modulateur : buteurs titulaires = fiabilité maximale, absents = réduction
+        scorer_factor = 0.60 + 0.25 * scorer_coef + 0.15 * min(season_goals / 15.0, 1.0) * season_coef
+        return goals_norm * scorer_factor
+
     hs  = _team_factor(home)
     aws = _team_factor(away)
     avg = (hs + aws) / 2.0
+
+    off_h = _offensive_factor(home)
+    off_a = _offensive_factor(away)
 
     factors = {
         "1":        hs,
@@ -374,10 +392,10 @@ def compute_safety_score(market_code: str, prob: float, home: dict, away: dict) 
         "1N":       hs * 0.65 + avg * 0.35,
         "12":       max(hs, aws),
         "2N":       aws * 0.65 + avg * 0.35,
-        "Over 2.5": (min(home.get("goals_scored", 1.0) / 2.5, 1.0)
-                     + min(away.get("goals_scored", 1.0) / 2.5, 1.0)) / 2.0,
-        "BTTS":     (min(home.get("goals_scored", 1.0) / 2.0, 1.0)
-                     + min(away.get("goals_scored", 1.0) / 2.0, 1.0)) / 2.0,
+        # Over 2.5 : total de buts → moyenne des capacités offensives des 2 équipes
+        "Over 2.5": (off_h + off_a) / 2.0,
+        # BTTS : les DEUX équipes doivent marquer → facteur limitant (min)
+        "BTTS":     min(off_h, off_a),
     }
     factor = factors.get(market_code, avg)
     return round(prob * (0.65 + 0.35 * factor), 2)
