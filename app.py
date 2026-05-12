@@ -15,6 +15,7 @@ except Exception:
 from predictor_v2 import (
     adjust_expected_goals,
     calculate_goal_markets,
+    compute_safety_score,
     confidence_index,
     final_reco,
     get_rank_power,
@@ -144,6 +145,18 @@ def render_lequipe_search(key_prefix: str, is_international: bool = False):
                 except Exception:
                     pass
 
+                # Buts du meilleur buteur (saison, championnat) - footmercato.net
+                scorer_season_msg = ""
+                try:
+                    from scraper_footmercato import get_top_scorer
+                    goals_val, scorer_name = get_top_scorer(name)
+                    if goals_val:
+                        st.session_state[f"{key_prefix}_sgs"] = goals_val
+                        st.session_state[f"{key_prefix}_sn_name"] = scorer_name
+                        scorer_season_msg = f"  Meilleur buteur (saison) : **{scorer_name}** ({goals_val} buts)."
+                except Exception:
+                    pass
+
                 cache_note = ""
                 if data.get("from_cache"):
                     age = data.get("cache_age_min", 0)
@@ -157,7 +170,7 @@ def render_lequipe_search(key_prefix: str, is_international: bool = False):
                 )
                 st.success(
                     f"✅ **{data['team_name']}** — {data['nb_matches']} matchs (lequipe.fr).{cache_note}"
-                    + rank_msg + assists_msg + "\n\n"
+                    + rank_msg + assists_msg + scorer_season_msg + "\n\n"
                     + matches_preview + "\n\n"
                     "Vérifiez la présence du buteur/passeur si besoin."
                 )
@@ -277,19 +290,44 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
         if pa_name:
             st.caption(f"Meilleur passeur : **{pa_name}**")
 
-    col_h, col_i = st.columns(2)
-    with col_h:
-        scorer_present = st.checkbox(
-            "Meilleur buteur disponible ?",
-            value=st.session_state.get(f"{key_prefix}_sp", True),
-            key=f"{key_prefix}_sp"
-        )
-    with col_i:
-        assist_present = st.checkbox(
-            "Meilleur passeur disponible ?",
-            value=st.session_state.get(f"{key_prefix}_ap", True),
-            key=f"{key_prefix}_ap"
-        )
+    if is_international:
+        col_h, col_i = st.columns(2)
+        with col_h:
+            scorer_present = st.checkbox(
+                "Meilleur buteur disponible ?",
+                value=st.session_state.get(f"{key_prefix}_sp", True),
+                key=f"{key_prefix}_sp"
+            )
+        with col_i:
+            assist_present = st.checkbox(
+                "Meilleur passeur disponible ?",
+                value=st.session_state.get(f"{key_prefix}_ap", True),
+                key=f"{key_prefix}_ap"
+            )
+    else:
+        col_h, col_i = st.columns(2)
+        with col_h:
+            _sp_def = st.session_state.get(f"{key_prefix}_sp", "Titulaire")
+            if not isinstance(_sp_def, str):
+                _sp_def = "Titulaire"
+            scorer_present = st.radio(
+                "Meilleur buteur (5 matchs)",
+                options=["Titulaire", "Banc", "Absent"],
+                index=["Titulaire", "Banc", "Absent"].index(_sp_def),
+                key=f"{key_prefix}_sp",
+                horizontal=True,
+            )
+        with col_i:
+            _ap_def = st.session_state.get(f"{key_prefix}_ap", "Titulaire")
+            if not isinstance(_ap_def, str):
+                _ap_def = "Titulaire"
+            assist_present = st.radio(
+                "Meilleur passeur (saison)",
+                options=["Titulaire", "Banc", "Absent"],
+                index=["Titulaire", "Banc", "Absent"].index(_ap_def),
+                key=f"{key_prefix}_ap",
+                horizontal=True,
+            )
 
     if is_international:
         rank = st.number_input(
@@ -312,6 +350,28 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
             value=st.session_state.get(f"{key_prefix}_rank", 50),
             key=f"{key_prefix}_rank"
         )
+
+        col_j, col_k = st.columns(2)
+        with col_j:
+            season_goals_scorer = st.number_input(
+                "Buts du meilleur buteur (saison)", 0, 60,
+                key=f"{key_prefix}_sgs"
+            )
+            sn_name = st.session_state.get(f"{key_prefix}_sn_name", "")
+            if sn_name:
+                st.caption(f"Meilleur buteur saison : **{sn_name}**")
+        with col_k:
+            _ssp_def = st.session_state.get(f"{key_prefix}_ssp", "Titulaire")
+            if not isinstance(_ssp_def, str):
+                _ssp_def = "Titulaire"
+            season_scorer_present = st.radio(
+                "Meilleur buteur (saison)",
+                options=["Titulaire", "Banc", "Absent"],
+                index=["Titulaire", "Banc", "Absent"].index(_ssp_def),
+                key=f"{key_prefix}_ssp",
+                horizontal=True,
+            )
+
         team = {
             "wins": wins, "draws": draws, "losses": losses,
             "goals_scored": goals_scored, "goals_conceded": goals_conceded,
@@ -319,6 +379,8 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
             "max_assists_by_player": max_assists,
             "top_scorer_present": scorer_present,
             "top_assist_present": assist_present,
+            "season_goals_scorer": season_goals_scorer,
+            "season_scorer_present": season_scorer_present,
             "uefa_rank": rank,
         }
     return team
@@ -401,6 +463,23 @@ def render_common_analysis(home, away, key_prefix, competition_label):
 
             reco = final_reco(index, best_financial[2][2])
             score_str = f"{best_score['home_goals']}-{best_score['away_goals']} ({round(best_score['probability']*100, 2)}%)"
+
+            all_markets_guide = [
+                ("1",        "Victoire domicile",        res["home_prob"],        v_home[2]),
+                ("N",        "Match nul",                res["draw_prob"],         v_draw[2]),
+                ("2",        "Victoire extérieur",       res["away_prob"],         v_away[2]),
+                ("1N",       "Domicile ou nul",          prob_1n,                  v_1n[2]),
+                ("12",       "Domicile ou extérieur",    prob_12,                  v_12[2]),
+                ("2N",       "Extérieur ou nul",         prob_2n,                  v_2n[2]),
+                ("Over 2.5", "Over 2.5 buts",            goal_markets["over25"],  v_over25[2]),
+                ("BTTS",     "Les 2 équipes marquent",   goal_markets["btts"],    v_btts[2]),
+            ]
+            # Pari le plus sûr : score ajusté combinant probabilité + qualité des équipes
+            safest = max(
+                all_markets_guide,
+                key=lambda x: compute_safety_score(x[0], x[2], home, away)
+            )
+            safest_safety = compute_safety_score(safest[0], safest[2], home, away)
 
             st.markdown("---")
             st.markdown('<div class="section-header">📊 Probabilités</div>', unsafe_allow_html=True)
@@ -499,12 +578,12 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             st.markdown(f"""
             <div class="synthese-card">
               <div class="synth-row">
-                <span class="synth-key">Résultat le plus probable</span>
-                <span class="synth-val accent">{res['prediction']} — {res['label']}</span>
+                <span class="synth-key">🛡️ Pari le plus sûr</span>
+                <span class="synth-val gold">{safest[1]} — {safest[2]}%</span>
               </div>
               <div class="synth-row">
-                <span class="synth-key">Meilleur marché</span>
-                <span class="synth-val gold">{format_market_label(best_financial[0])}</span>
+                <span class="synth-key">Résultat le plus probable</span>
+                <span class="synth-val accent">{res['prediction']} — {res['label']}</span>
               </div>
               <div class="synth-row">
                 <span class="synth-key">Verdict</span>
@@ -523,20 +602,6 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             # --- Guide parieur ---
             st.markdown("---")
             st.markdown('<div class="section-header">📋 Guide parieur</div>', unsafe_allow_html=True)
-
-            all_markets_guide = [
-                ("1",    "Victoire domicile",        res["home_prob"], v_home[2]),
-                ("N",    "Match nul",                res["draw_prob"],  v_draw[2]),
-                ("2",    "Victoire extérieur",       res["away_prob"],  v_away[2]),
-                ("1N",   "Domicile ou nul",          prob_1n,           v_1n[2]),
-                ("12",   "Domicile ou extérieur",    prob_12,           v_12[2]),
-                ("2N",   "Extérieur ou nul",         prob_2n,           v_2n[2]),
-                ("Over 2.5", "Over 2.5 buts",        goal_markets["over25"], v_over25[2]),
-                ("BTTS", "Les 2 équipes marquent",   goal_markets["btts"],   v_btts[2]),
-            ]
-
-            # Pari le plus sûr : probabilité modèle la plus élevée
-            safest = max(all_markets_guide, key=lambda x: x[2])
 
             # Pari le plus rentable : edge le plus élevé
             most_valuable = max(all_markets_guide, key=lambda x: x[3])
@@ -569,8 +634,12 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 <div class="guide-card safe">
                   <div class="card-title">🛡️ Le pari le plus sûr</div>
                   <div class="card-main">{safest[1]}</div>
-                  <div class="card-sub">Probabilité modèle : <strong>{safest[2]}%</strong><br>
-                  Le résultat que le modèle juge le plus probable. Privilégiez ce marché pour limiter le risque.</div>
+                  <div class="card-sub">
+                    Probabilité modèle : <strong>{safest[2]}%</strong> &nbsp;|&nbsp; Score de sécurité : <strong>{safest_safety}</strong><br>
+                    Calculé sur : forme (5 derniers matchs), buts marqués/encaissés,
+                    présence du buteur clé (5 matchs) et du meilleur passeur,
+                    buts du meilleur buteur de la saison et sa disponibilité.
+                  </div>
                 </div>""", unsafe_allow_html=True)
 
             with col_v:
@@ -695,7 +764,7 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 "value_2": v_away[0], "edge_2": v_away[2],
                 "value_over25": v_over25[0], "edge_over25": v_over25[2],
                 "value_btts": v_btts[0], "edge_btts": v_btts[2],
-                "meilleur_marche": best_financial[0], "verdict": reco,
+                "meilleur_marche": safest[0], "verdict": reco,
                 "pari_realise": "", "resultat_reel": "", "score_reel": "",
             })
             st.success("✅ Analyse sauvegardée dans historique.csv")

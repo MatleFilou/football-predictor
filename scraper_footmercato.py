@@ -450,6 +450,115 @@ def get_top_assists(team_name: str) -> tuple[int, str]:
 
 
 # ---------------------------------------------------------------------------
+# Meilleur buteur (saison, championnat)
+# ---------------------------------------------------------------------------
+
+def _get_players_goals_from_effectif(club_slug: str) -> list[dict]:
+    """
+    Scrape /effectif/ et retourne les joueurs triés par buts (toutes compétitions).
+    """
+    url = f"https://www.footmercato.net/club/{club_slug}/effectif/"
+    r = _fetch_with_retry(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    players = []
+    for table in soup.find_all("table"):
+        ths = [th.get_text(strip=True) for th in table.find_all("th")]
+        if "Buts" not in ths:
+            continue
+        buts_idx = ths.index("Buts")
+        for row in table.find_all("tr")[1:]:
+            cols = row.find_all("td")
+            if len(cols) <= buts_idx:
+                continue
+            link = cols[1].find("a", href=True)
+            player_url = link["href"] if link else None
+            raw_name = cols[1].get_text(separator=" ", strip=True)
+            name = re.sub(r"\s*\d+\s*ans?\s*$", "", raw_name, flags=re.IGNORECASE).strip()
+            try:
+                goals_val = int(cols[buts_idx].get_text(strip=True))
+            except ValueError:
+                goals_val = 0
+            players.append({"name": name, "goals_all": goals_val, "url": player_url})
+
+    players.sort(key=lambda p: p["goals_all"], reverse=True)
+    return players
+
+
+def _get_league_goals_for_player(player_url: str, league: str) -> int:
+    """
+    Scrape la page individuelle d'un joueur et retourne ses buts dans le
+    championnat demandé. Structure attendue : [competition, MJ, Buts, PD, ...]
+    Retourne -1 si non trouvé.
+    """
+    import time
+    keywords = LEAGUE_KEYWORDS.get(league, [])
+    if not keywords or not player_url:
+        return -1
+    try:
+        r = _fetch_with_retry(player_url)
+    except Exception:
+        return -1
+    soup = BeautifulSoup(r.text, "html.parser")
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cols = row.find_all("td")
+            if not cols:
+                continue
+            row_label = cols[0].get_text(strip=True).lower()
+            if any(kw in row_label for kw in keywords):
+                try:
+                    return int(cols[2].get_text(strip=True))  # index 2 = Buts
+                except (ValueError, IndexError):
+                    pass
+    return -1
+
+
+def get_top_scorer(team_name: str) -> tuple[int, str]:
+    """
+    Retourne (nb_buts_saison, nom_du_joueur) pour le meilleur buteur
+    du club donné en championnat (stats ligue uniquement).
+
+    Stratégie :
+      1. Scrape /effectif/ → top 5 joueurs par buts toutes compétitions
+      2. Pour chacun, lit la page individuelle → extrait les buts du championnat
+      3. Retourne le maximum
+
+    Retourne (0, "") si le club n'est pas trouvé.
+    """
+    import time
+
+    slug = _find_slug(team_name)
+    if not slug:
+        return 0, ""
+
+    league = SLUG_TO_LEAGUE.get(slug)
+    if not league:
+        return 0, ""
+
+    try:
+        players = _get_players_goals_from_effectif(slug)
+    except Exception:
+        return 0, ""
+
+    candidates = [p for p in players if p["goals_all"] > 0][:5]
+    if not candidates:
+        return 0, ""
+
+    best_goals, best_name = 0, ""
+    for p in candidates:
+        time.sleep(0.4)
+        league_goals = _get_league_goals_for_player(p["url"], league)
+        if league_goals > best_goals:
+            best_goals = league_goals
+            best_name = p["name"]
+
+    if best_goals <= 0:
+        return 0, ""
+    return best_goals, best_name
+
+
+# ---------------------------------------------------------------------------
 # Test en ligne de commande
 # ---------------------------------------------------------------------------
 

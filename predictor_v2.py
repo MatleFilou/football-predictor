@@ -76,13 +76,37 @@ def form_score(w, d, l):
 
 
 # ---------------------------------------------------------------------------
-# Impact joueurs clés (V1 inchangée)
+# Statut joueur → coefficient
 # ---------------------------------------------------------------------------
 
-def player_impact(max_goals, max_assists, scorer_present, passer_present):
-    impact = 0
-    impact += max_goals * (0.08 if scorer_present else -0.08)
-    impact += max_assists * (0.04 if passer_present else -0.04)
+def _status_coef(val) -> float:
+    """
+    Convertit le statut d'un joueur en coefficient multiplicateur.
+      - True  / 'Titulaire' → 1.0  (titulaire : plein impact)
+      - 'Banc'              → 0.5  (remplaçant : impact partiel)
+      - False / 'Absent'   → 0.0  (absent : malus appliqué)
+    Compatible avec les anciennes valeurs booléennes (sélections internationales).
+    """
+    if isinstance(val, bool):
+        return 1.0 if val else 0.0
+    s = str(val).lower()
+    if s == "titulaire":
+        return 1.0
+    if s == "banc":
+        return 0.5
+    return 0.0  # absent ou inconnu
+
+
+# ---------------------------------------------------------------------------
+# Impact joueurs clés
+# ---------------------------------------------------------------------------
+
+def player_impact(max_goals, max_assists, scorer_val, passer_val):
+    sc = _status_coef(scorer_val)
+    pa = _status_coef(passer_val)
+    # Titulaire → bonus plein ; Banc → bonus proportionnel ; Absent → malus
+    impact  = max_goals  * (0.08 * sc if sc > 0 else -0.08)
+    impact += max_assists * (0.04 * pa if pa > 0 else -0.04)
     return impact
 
 
@@ -310,6 +334,53 @@ def final_reco(index, edge=None):
         return "⚠️ CONFIANCE MODÉRÉE"
     else:
         return "❌ MATCH INCERTAIN"
+
+
+def compute_safety_score(market_code: str, prob: float, home: dict, away: dict) -> float:
+    """
+    Score de sécurité ajusté : combine la probabilité du modèle avec les
+    indicateurs de qualité des équipes (forme, buts marqués/encaissés,
+    présence des joueurs clés, buts du meilleur buteur de la saison).
+    Plus le score est élevé, plus le pari est considéré sûr.
+    """
+    def _team_factor(team: dict) -> float:
+        n = team["wins"] + team["draws"] + team["losses"]
+        form     = (team["wins"] * 3 + team["draws"]) / (n * 3) if n > 0 else 0.33
+        scoring  = min(team.get("goals_scored", 1.0) / 3.0, 1.0)
+        defense  = max(0.0, 1.0 - team.get("goals_conceded", 1.5) / 3.0)
+        key_p    = (
+            _status_coef(team.get("top_scorer_present", True)) * 0.5
+            + _status_coef(team.get("top_assist_present", True)) * 0.5
+        )
+        season_goals   = team.get("season_goals_scorer", 0)
+        season_status  = team.get("season_scorer_present", True)
+        scorer_bonus   = min(season_goals / 20.0, 1.0) * _status_coef(season_status)
+        return (
+            form          * 0.40
+            + scoring     * 0.20
+            + defense     * 0.20
+            + key_p       * 0.10
+            + scorer_bonus * 0.10
+        )
+
+    hs  = _team_factor(home)
+    aws = _team_factor(away)
+    avg = (hs + aws) / 2.0
+
+    factors = {
+        "1":        hs,
+        "2":        aws,
+        "N":        avg * 0.8,
+        "1N":       hs * 0.65 + avg * 0.35,
+        "12":       max(hs, aws),
+        "2N":       aws * 0.65 + avg * 0.35,
+        "Over 2.5": (min(home.get("goals_scored", 1.0) / 2.5, 1.0)
+                     + min(away.get("goals_scored", 1.0) / 2.5, 1.0)) / 2.0,
+        "BTTS":     (min(home.get("goals_scored", 1.0) / 2.0, 1.0)
+                     + min(away.get("goals_scored", 1.0) / 2.0, 1.0)) / 2.0,
+    }
+    factor = factors.get(market_code, avg)
+    return round(prob * (0.65 + 0.35 * factor), 2)
 
 
 def value_signal(edge):
