@@ -480,12 +480,16 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 ("Over 2.5", "Over 2.5 buts",            goal_markets["over25"],  v_over25[2]),
                 ("BTTS",     "Les 2 équipes marquent",   goal_markets["btts"],    v_btts[2]),
             ]
-            # Pari le plus sûr : score ajusté combinant probabilité + qualité des équipes
-            safest = max(
-                all_markets_guide,
-                key=lambda x: compute_safety_score(x[0], x[2], home, away)
-            )
-            safest_safety = compute_safety_score(safest[0], safest[2], home, away)
+            result_markets = [m for m in all_markets_guide if m[0] in ("1", "N", "2", "1N", "12", "2N")]
+            goal_markets_list = [m for m in all_markets_guide if m[0] in ("Over 1.5", "Over 2.5", "BTTS")]
+
+            # Pari le plus sûr en termes de résultat
+            safest_result = max(result_markets, key=lambda x: compute_safety_score(x[0], x[2], home, away))
+            safest_result_safety = compute_safety_score(safest_result[0], safest_result[2], home, away)
+
+            # Pari le plus sûr en termes de buts
+            safest_goals = max(goal_markets_list, key=lambda x: compute_safety_score(x[0], x[2], home, away))
+            safest_goals_safety = compute_safety_score(safest_goals[0], safest_goals[2], home, away)
 
             st.markdown("---")
             st.markdown('<div class="section-header">📊 Probabilités</div>', unsafe_allow_html=True)
@@ -586,8 +590,12 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             st.markdown(f"""
             <div class="synthese-card">
               <div class="synth-row">
-                <span class="synth-key">🛡️ Pari le plus sûr</span>
-                <span class="synth-val gold">{safest[1]} — {safest[2]}%</span>
+                <span class="synth-key">🛡️ Paris les plus sûrs — Résultat</span>
+                <span class="synth-val gold">{safest_result[1]} — {safest_result[2]}%</span>
+              </div>
+              <div class="synth-row">
+                <span class="synth-key">⚽ Paris les plus sûrs — Buts</span>
+                <span class="synth-val gold">{safest_goals[1]} — {safest_goals[2]}%</span>
               </div>
               <div class="synth-row">
                 <span class="synth-key">Résultat le plus probable</span>
@@ -617,9 +625,9 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             # Combinaisons : marchés à edge positif compatibles
             # On exclut les doubles chances de la combinaison avec les marchés de résultat simples
             # (1N/12/2N sont déjà des combinaisons résultat, pas compatible avec 1/N/2)
-            result_markets_pos = [m for m in all_markets_guide if m[0] in ("1", "N", "2") and m[3] > 0]
-            dc_markets_pos     = [m for m in all_markets_guide if m[0] in ("1N", "12", "2N") and m[3] > 0]
-            goal_markets_pos   = [m for m in all_markets_guide if m[0] in ("Over 2.5", "BTTS") and m[3] > 0]
+            result_markets_pos = [m for m in result_markets     if m[3] > 0 and m[0] in ("1", "N", "2")]
+            dc_markets_pos     = [m for m in result_markets     if m[3] > 0 and m[0] in ("1N", "12", "2N")]
+            goal_markets_pos   = [m for m in goal_markets_list  if m[3] > 0 and m[0] in ("Over 1.5", "Over 2.5", "BTTS")]
 
             combos = []
             for rm in result_markets_pos:
@@ -628,25 +636,35 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             for dc in dc_markets_pos:
                 for gm in goal_markets_pos:
                     combos.append(f"{dc[1]} + {gm[1]}")
-            if len(goal_markets_pos) == 2:
+            gp_codes = [m[0] for m in goal_markets_pos]
+            if "Over 2.5" in gp_codes and "BTTS" in gp_codes:
                 combos.append("Over 2.5 + BTTS")
                 for rm in result_markets_pos:
                     combos.append(f"{rm[1]} + Over 2.5 + BTTS")
                 for dc in dc_markets_pos:
                     combos.append(f"{dc[1]} + Over 2.5 + BTTS")
 
-            col_s, col_v = st.columns(2)
+            col_s, col_sg, col_v = st.columns(3)
 
             with col_s:
                 col_s.markdown(f"""
                 <div class="guide-card safe">
-                  <div class="card-title">🛡️ Le pari le plus sûr</div>
-                  <div class="card-main">{safest[1]}</div>
+                  <div class="card-title">🛡️ Pari sûr — Résultat</div>
+                  <div class="card-main">{safest_result[1]}</div>
                   <div class="card-sub">
-                    Probabilité modèle : <strong>{safest[2]}%</strong> &nbsp;|&nbsp; Score de sécurité : <strong>{safest_safety}</strong><br>
-                    Calculé sur : forme (5 derniers matchs), buts marqués/encaissés,
-                    présence du buteur clé (5 matchs) et du meilleur passeur,
-                    buts du meilleur buteur de la saison et sa disponibilité.
+                    Probabilité : <strong>{safest_result[2]}%</strong> &nbsp;|&nbsp; Sécurité : <strong>{safest_result_safety}</strong><br>
+                    Basé sur la forme, les buts encaissés et la présence des joueurs clés.
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+            with col_sg:
+                col_sg.markdown(f"""
+                <div class="guide-card safe">
+                  <div class="card-title">⚽ Pari sûr — Buts</div>
+                  <div class="card-main">{safest_goals[1]}</div>
+                  <div class="card-sub">
+                    Probabilité : <strong>{safest_goals[2]}%</strong> &nbsp;|&nbsp; Sécurité : <strong>{safest_goals_safety}</strong><br>
+                    Basé sur les buts marqués et la présence des buteurs (5 matchs + saison).
                   </div>
                 </div>""", unsafe_allow_html=True)
 
