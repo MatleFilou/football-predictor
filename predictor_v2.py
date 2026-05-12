@@ -264,9 +264,11 @@ def confidence_index(res, home=None, away=None):
 
 def adjust_expected_goals(goals_scored, max_goals, max_assists,
                            scorer_present, passer_present, rank_power):
+    sc = _status_coef(scorer_present)
+    pa = _status_coef(passer_present)
     adjusted = goals_scored
-    adjusted += max_goals  * (0.06 if scorer_present  else -0.06)
-    adjusted += max_assists * (0.03 if passer_present else -0.03)
+    adjusted += max_goals  * (0.06 * sc if sc > 0 else -0.06)
+    adjusted += max_assists * (0.03 * pa if pa > 0 else -0.03)
     adjusted += rank_power  * 0.04
     if adjusted < 0.2:
         adjusted = 0.2
