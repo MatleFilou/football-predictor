@@ -288,15 +288,21 @@ def predict_scores(home_goals_avg, away_goals_avg, max_goals=10):
 
 
 def calculate_goal_markets(home_goals_avg, away_goals_avg, max_goals=10):
-    over25 = btts = 0
+    over15 = over25 = btts = 0
     for hg in range(max_goals + 1):
         for ag in range(max_goals + 1):
             p = poisson_probability(home_goals_avg, hg) * poisson_probability(away_goals_avg, ag)
+            if hg + ag >= 2:
+                over15 += p
             if hg + ag >= 3:
                 over25 += p
             if hg > 0 and ag > 0:
                 btts += p
-    return {"over25": round(over25 * 100, 1), "btts": round(btts * 100, 1)}
+    return {
+        "over15": round(over15 * 100, 1),
+        "over25": round(over25 * 100, 1),
+        "btts":   round(btts   * 100, 1),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +398,8 @@ def compute_safety_score(market_code: str, prob: float, home: dict, away: dict) 
         "1N":       hs * 0.65 + avg * 0.35,
         "12":       max(hs, aws),
         "2N":       aws * 0.65 + avg * 0.35,
+        # Over 1.5 : seuil bas → capacité offensive globale (légèrement favorisé vs 2.5)
+        "Over 1.5": (off_h + off_a) / 2.0 * 1.05,
         # Over 2.5 : total de buts → moyenne des capacités offensives des 2 équipes
         "Over 2.5": (off_h + off_a) / 2.0,
         # BTTS : les DEUX équipes doivent marquer → facteur limitant (min)

@@ -60,14 +60,15 @@ def log_analyse(row: dict):
 
 def format_market_label(code):
     return {
-        "1":    "1 — Victoire domicile",
-        "N":    "N — Match nul",
-        "2":    "2 — Victoire extérieur",
-        "1N":   "1N — Domicile ou nul",
-        "12":   "12 — Domicile ou extérieur",
-        "2N":   "2N — Extérieur ou nul",
+        "1":       "1 — Victoire domicile",
+        "N":       "N — Match nul",
+        "2":       "2 — Victoire extérieur",
+        "1N":      "1N — Domicile ou nul",
+        "12":      "12 — Domicile ou extérieur",
+        "2N":      "2N — Extérieur ou nul",
+        "Over 1.5": "Over 1.5",
         "Over 2.5": "Over 2.5",
-        "BTTS": "BTTS — Les 2 équipes marquent",
+        "BTTS":    "BTTS — Les 2 équipes marquent",
     }.get(code, code)
 
 def render_lequipe_search(key_prefix: str, is_international: bool = False):
@@ -397,7 +398,7 @@ def render_common_analysis(home, away, key_prefix, competition_label):
     with c3:
         odd_away = st.number_input("Cote 2", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_2")
 
-    c4, c5, c6, c7, c8 = st.columns(5)
+    c4, c5, c6, c7, c8, c9 = st.columns(6)
     with c4:
         odd_1n = st.number_input("Cote 1N", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_1n")
     with c5:
@@ -405,8 +406,10 @@ def render_common_analysis(home, away, key_prefix, competition_label):
     with c6:
         odd_2n = st.number_input("Cote 2N", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_2n")
     with c7:
-        odd_over25 = st.number_input("Cote Over 2.5", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_o25")
+        odd_over15 = st.number_input("Cote Over 1.5", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_o15")
     with c8:
+        odd_over25 = st.number_input("Cote Over 2.5", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_o25")
+    with c9:
         odd_btts = st.number_input("Cote BTTS", min_value=0.0, value=0.0, step=0.05, format="%.2f", key=f"{key_prefix}_odd_btts")
 
     if st.button("🔍 Analyser", key=f"{key_prefix}_analyse"):
@@ -437,11 +440,12 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             best_score, _ = predict_scores(adj_home, adj_away)
             goal_markets = calculate_goal_markets(adj_home, adj_away)
 
-            v_home = value_bet(res["home_prob"], odd_home)
-            v_draw = value_bet(res["draw_prob"], odd_draw)
-            v_away = value_bet(res["away_prob"], odd_away)
+            v_home   = value_bet(res["home_prob"],       odd_home)
+            v_draw   = value_bet(res["draw_prob"],        odd_draw)
+            v_away   = value_bet(res["away_prob"],        odd_away)
+            v_over15 = value_bet(goal_markets["over15"], odd_over15)
             v_over25 = value_bet(goal_markets["over25"], odd_over25)
-            v_btts = value_bet(goal_markets["btts"], odd_btts)
+            v_btts   = value_bet(goal_markets["btts"],   odd_btts)
 
             prob_1n = round(res["home_prob"] + res["draw_prob"], 1)
             prob_12 = round(res["home_prob"] + res["away_prob"], 1)
@@ -451,14 +455,15 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             v_2n = value_bet(prob_2n, odd_2n)
 
             best_financial = max([
-                ("1",        res["home_prob"],       v_home),
-                ("N",        res["draw_prob"],        v_draw),
-                ("2",        res["away_prob"],        v_away),
-                ("1N",       prob_1n,                v_1n),
-                ("12",       prob_12,                v_12),
-                ("2N",       prob_2n,                v_2n),
-                ("Over 2.5", goal_markets["over25"], v_over25),
-                ("BTTS",     goal_markets["btts"],   v_btts),
+                ("1",        res["home_prob"],        v_home),
+                ("N",        res["draw_prob"],         v_draw),
+                ("2",        res["away_prob"],         v_away),
+                ("1N",       prob_1n,                 v_1n),
+                ("12",       prob_12,                 v_12),
+                ("2N",       prob_2n,                 v_2n),
+                ("Over 1.5", goal_markets["over15"],  v_over15),
+                ("Over 2.5", goal_markets["over25"],  v_over25),
+                ("BTTS",     goal_markets["btts"],    v_btts),
             ], key=lambda x: x[2][2])
 
             reco = final_reco(index, best_financial[2][2])
@@ -471,6 +476,7 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 ("1N",       "Domicile ou nul",          prob_1n,                  v_1n[2]),
                 ("12",       "Domicile ou extérieur",    prob_12,                  v_12[2]),
                 ("2N",       "Extérieur ou nul",         prob_2n,                  v_2n[2]),
+                ("Over 1.5", "Over 1.5 buts",            goal_markets["over15"],  v_over15[2]),
                 ("Over 2.5", "Over 2.5 buts",            goal_markets["over25"],  v_over25[2]),
                 ("BTTS",     "Les 2 équipes marquent",   goal_markets["btts"],    v_btts[2]),
             ]
@@ -506,15 +512,16 @@ def render_common_analysis(home, away, key_prefix, competition_label):
 
             st.markdown("---")
             st.markdown('<div class="section-header">⚽ Marchés de buts</div>', unsafe_allow_html=True)
-            col4, col5, col6 = st.columns(3)
+            col4, col5, col6, col7 = st.columns(4)
             col4.markdown(f"""
             <div class="prob-container">
               <div class="prob-label">Score probable</div>
               <div class="prob-value" style="font-size:1.2rem">{score_str}</div>
             </div>""", unsafe_allow_html=True)
             for col, label, prob in [
-                (col5, "Over 2.5", goal_markets["over25"]),
-                (col6, "BTTS",     goal_markets["btts"]),
+                (col5, "Over 1.5", goal_markets["over15"]),
+                (col6, "Over 2.5", goal_markets["over25"]),
+                (col7, "BTTS",     goal_markets["btts"]),
             ]:
                 col.markdown(f"""
                 <div class="prob-container">
@@ -529,14 +536,15 @@ def render_common_analysis(home, away, key_prefix, competition_label):
             st.markdown('<div class="section-header">💰 Value Bet</div>', unsafe_allow_html=True)
 
             vb_rows = [
-                ("1",        res["home_prob"], v_home[1],   v_home[2],   v_home[0]),
-                ("N",        res["draw_prob"], v_draw[1],   v_draw[2],   v_draw[0]),
-                ("2",        res["away_prob"], v_away[1],   v_away[2],   v_away[0]),
-                ("1N",       prob_1n,          v_1n[1],     v_1n[2],     v_1n[0]),
-                ("12",       prob_12,          v_12[1],     v_12[2],     v_12[0]),
-                ("2N",       prob_2n,          v_2n[1],     v_2n[2],     v_2n[0]),
-                ("Over 2.5", goal_markets["over25"], v_over25[1], v_over25[2], v_over25[0]),
-                ("BTTS",     goal_markets["btts"],   v_btts[1],   v_btts[2],   v_btts[0]),
+                ("1",        res["home_prob"],        v_home[1],   v_home[2],   v_home[0]),
+                ("N",        res["draw_prob"],         v_draw[1],   v_draw[2],   v_draw[0]),
+                ("2",        res["away_prob"],         v_away[1],   v_away[2],   v_away[0]),
+                ("1N",       prob_1n,                  v_1n[1],     v_1n[2],     v_1n[0]),
+                ("12",       prob_12,                  v_12[1],     v_12[2],     v_12[0]),
+                ("2N",       prob_2n,                  v_2n[1],     v_2n[2],     v_2n[0]),
+                ("Over 1.5", goal_markets["over15"],  v_over15[1], v_over15[2], v_over15[0]),
+                ("Over 2.5", goal_markets["over25"],  v_over25[1], v_over25[2], v_over25[0]),
+                ("BTTS",     goal_markets["btts"],    v_btts[1],   v_btts[2],   v_btts[0]),
             ]
             vb_html = '<table class="vb-table"><thead><tr>'
             for h in ["Marché", "Modèle", "Book", "Edge", "Signal"]:
@@ -803,6 +811,13 @@ def _score_btts(score_str: str) -> bool | None:
     return int(m.group(1)) > 0 and int(m.group(2)) > 0
 
 
+def _score_over15(score_str: str) -> bool | None:
+    m = re.match(r"(\d+)\s*[-–]\s*(\d+)", str(score_str).strip())
+    if not m:
+        return None
+    return int(m.group(1)) + int(m.group(2)) > 1
+
+
 def _score_over25(score_str: str) -> bool | None:
     m = re.match(r"(\d+)\s*[-–]\s*(\d+)", str(score_str).strip())
     if not m:
@@ -823,6 +838,8 @@ def _market_won(market: str, score_str: str) -> bool | None:
         return result in ("1", "2") if result else None
     if market == "2N":
         return result in ("2", "N") if result else None
+    if market == "Over 1.5":
+        return _score_over15(score_str)
     if market == "Over 2.5":
         return _score_over25(score_str)
     if market == "BTTS":
@@ -889,7 +906,7 @@ ANALYSE_COLUMNS = [
     "prediction", "meilleur_marche", "pari_realise", "cote", "score_reel",
 ]
 
-MARKET_OPTIONS = ["", "1", "N", "2", "1N", "12", "2N", "Over 2.5", "BTTS"]
+MARKET_OPTIONS = ["", "1", "N", "2", "1N", "12", "2N", "Over 1.5", "Over 2.5", "BTTS"]
 
 
 def _load_analyse() -> pd.DataFrame:
@@ -1074,7 +1091,7 @@ def render_analyse_tab():
             market_rows.append({"market": m, "score_reel": row["score_reel"]})
 
     market_stats = []
-    for market in ["1", "N", "2", "1N", "12", "2N", "Over 2.5", "BTTS"]:
+    for market in ["1", "N", "2", "1N", "12", "2N", "Over 1.5", "Over 2.5", "BTTS"]:
         subset = [r for r in market_rows if r["market"] == market]
         if not subset:
             continue
