@@ -101,6 +101,33 @@ def _status_coef(val) -> float:
 # Impact joueurs clés
 # ---------------------------------------------------------------------------
 
+def _key_positions_impact(gk_status, def_status, mid_status, att_status):
+    """
+    Impact des joueurs clés par ligne (sélections internationales).
+    Chaque ligne est représentée par un joueur référent dont la présence
+    influence la force globale de l'équipe.
+      Gardien  : impact défensif (0.05 / -0.08)
+      Défense  : impact défensif fort (0.08 / -0.12)
+      Milieu   : impact équilibré (0.08 / -0.10)
+      Attaque  : impact offensif dominant (0.12 / -0.15)
+    Banc → bonus réduit à 40 % du bonus titulaire.
+    """
+    def _line(sc, bonus, malus):
+        if sc == 1.0:
+            return bonus
+        elif sc > 0:          # Banc
+            return bonus * 0.4
+        else:                 # Absent
+            return -malus
+
+    return (
+        _line(_status_coef(gk_status),  0.05, 0.08)
+        + _line(_status_coef(def_status), 0.08, 0.12)
+        + _line(_status_coef(mid_status), 0.08, 0.10)
+        + _line(_status_coef(att_status), 0.12, 0.15)
+    )
+
+
 def player_impact(max_goals, max_assists, scorer_val, passer_val):
     sc = _status_coef(scorer_val)
     pa = _status_coef(passer_val)
@@ -154,25 +181,41 @@ def key_player_impact(key_player_present: bool) -> float:
 
 def team_strength(team, is_home=False):
     form    = form_score(team["wins"], team["draws"], team["losses"])
-    power   = get_rank_power(team) * 0.12
-    players = player_impact(
-        team["max_goals_by_player"],
-        team["max_assists_by_player"],
-        team["top_scorer_present"],
-        team["top_assist_present"],
-    )
-    absence  = absence_penalty(team.get("nb_absents", 0))
-    key_p    = key_player_impact(team.get("key_player_present", True))
+    power   = get_rank_power(team)
 
-    strength = (
-        form   * 0.5
-        + team["goals_scored"]   * 0.25
-        - team["goals_conceded"] * 0.2
-        + players
-        + power
-        - absence
-        + key_p
-    )
+    if "att_status" in team:
+        # Sélections : classement FIFA dominant, forme secondaire
+        players = _key_positions_impact(
+            team.get("gk_status",  "Titulaire"),
+            team.get("def_status", "Titulaire"),
+            team.get("mid_status", "Titulaire"),
+            team["att_status"],
+        )
+        strength = (
+            form                     * 0.30
+            + team["goals_scored"]   * 0.20
+            - team["goals_conceded"] * 0.15
+            + players
+            + power                  * 0.30
+        )
+    else:
+        players  = player_impact(
+            team["max_goals_by_player"],
+            team["max_assists_by_player"],
+            team["top_scorer_present"],
+            team["top_assist_present"],
+        )
+        absence  = absence_penalty(team.get("nb_absents", 0))
+        key_p    = key_player_impact(team.get("key_player_present", True))
+        strength = (
+            form                     * 0.5
+            + team["goals_scored"]   * 0.25
+            - team["goals_conceded"] * 0.2
+            + players
+            + power                  * 0.12
+            - absence
+            + key_p
+        )
 
     if is_home:
         strength += 0.3
@@ -263,13 +306,20 @@ def confidence_index(res, home=None, away=None):
 # ---------------------------------------------------------------------------
 
 def adjust_expected_goals(goals_scored, max_goals, max_assists,
-                           scorer_present, passer_present, rank_power):
+                           scorer_present, passer_present, rank_power,
+                           is_international=False):
     sc = _status_coef(scorer_present)
     pa = _status_coef(passer_present)
     adjusted = goals_scored
-    adjusted += max_goals  * (0.06 * sc if sc > 0 else -0.06)
-    adjusted += max_assists * (0.03 * pa if pa > 0 else -0.03)
-    adjusted += rank_power  * 0.04
+    if is_international:
+        # Sélections : scorer_present = att_status, passer_present = mid_status
+        adjusted += (0.25 * sc) if sc > 0 else -0.20   # attaquant clé
+        adjusted += (0.15 * pa) if pa > 0 else -0.10   # milieu clé
+        adjusted += rank_power * 0.10                   # classement FIFA fort
+    else:
+        adjusted += max_goals   * (0.06 * sc if sc > 0 else -0.06)
+        adjusted += max_assists * (0.03 * pa if pa > 0 else -0.03)
+        adjusted += rank_power  * 0.04
     if adjusted < 0.2:
         adjusted = 0.2
     return round(adjusted, 2)
@@ -356,20 +406,38 @@ def compute_safety_score(market_code: str, prob: float, home: dict, away: dict) 
         form     = (team["wins"] * 3 + team["draws"]) / (n * 3) if n > 0 else 0.33
         scoring  = min(team.get("goals_scored", 1.0) / 3.0, 1.0)
         defense  = max(0.0, 1.0 - team.get("goals_conceded", 1.5) / 3.0)
-        key_p    = (
-            _status_coef(team.get("top_scorer_present", True)) * 0.5
-            + _status_coef(team.get("top_assist_present", True)) * 0.5
-        )
-        season_goals   = team.get("season_goals_scorer", 0)
-        season_status  = team.get("season_scorer_present", True)
-        scorer_bonus   = min(season_goals / 20.0, 1.0) * _status_coef(season_status)
-        return (
-            form          * 0.40
-            + scoring     * 0.20
-            + defense     * 0.20
-            + key_p       * 0.10
-            + scorer_bonus * 0.10
-        )
+
+        if "att_status" in team:
+            # Sélections : classement FIFA dominant dans le score de sécurité
+            key_p = (
+                _status_coef(team["att_status"])                      * 0.40
+                + _status_coef(team.get("mid_status", "Titulaire"))   * 0.30
+                + _status_coef(team.get("def_status", "Titulaire"))   * 0.15
+                + _status_coef(team.get("gk_status",  "Titulaire"))   * 0.15
+            )
+            rank_norm = get_rank_power(team) / 10.0  # normalise 0→1
+            return (
+                form       * 0.20
+                + scoring  * 0.10
+                + defense  * 0.10
+                + key_p    * 0.10
+                + rank_norm * 0.50
+            )
+        else:
+            key_p = (
+                _status_coef(team.get("top_scorer_present", True)) * 0.5
+                + _status_coef(team.get("top_assist_present", True)) * 0.5
+            )
+            season_goals   = team.get("season_goals_scorer", 0)
+            season_status  = team.get("season_scorer_present", True)
+            scorer_bonus   = min(season_goals / 20.0, 1.0) * _status_coef(season_status)
+            return (
+                form          * 0.40
+                + scoring     * 0.20
+                + defense     * 0.20
+                + key_p       * 0.10
+                + scorer_bonus * 0.10
+            )
 
     def _offensive_factor(team: dict) -> float:
         """

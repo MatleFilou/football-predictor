@@ -123,9 +123,8 @@ def render_lequipe_search(key_prefix: str, is_international: bool = False):
             pass
 
         if is_international:
-            # Pour les sélections : pas de scraping lequipe.fr (clubs seulement)
             if rank_msg:
-                st.success(f"✅ Classement chargé pour **{name}**.{rank_msg}\nComplétez la forme manuellement.")
+                st.success(f"✅ Classement FIFA chargé pour **{name}**.{rank_msg}  Complétez la forme ci-dessous.")
             else:
                 st.warning(f"Sélection **{name}** non trouvée dans le classement FIFA. Entrez le rang manuellement.")
             return
@@ -294,29 +293,102 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
     with col_e:
         goals_conceded = st.number_input("Moy. buts encaissés / match", 0.0, 15.0, step=0.1, key=f"{key_prefix}_gc")
 
-    col_f, col_g = st.columns(2)
-    with col_f:
-        max_goals = st.number_input("Max buts d'un joueur (5 matchs)", 0, 15, key=f"{key_prefix}_mg")
-    with col_g:
-        max_assists = st.number_input("Passes décisives du meilleur passeur (saison)", 0, 30, key=f"{key_prefix}_ma")
-        pa_name = st.session_state.get(f"{key_prefix}_pa_name", "")
-        if pa_name:
-            st.caption(f"Meilleur passeur : **{pa_name}**")
+    if not is_international:
+        col_f, col_g = st.columns(2)
+        with col_f:
+            max_goals = st.number_input("Max buts d'un joueur (5 matchs)", 0, 15, key=f"{key_prefix}_mg")
+        with col_g:
+            max_assists = st.number_input("Passes décisives du meilleur passeur (saison)", 0, 30, key=f"{key_prefix}_ma")
+            pa_name = st.session_state.get(f"{key_prefix}_pa_name", "")
+            if pa_name:
+                st.caption(f"Meilleur passeur : **{pa_name}**")
 
     if is_international:
-        col_h, col_i = st.columns(2)
-        with col_h:
-            scorer_present = st.checkbox(
-                "Meilleur buteur disponible ?",
-                value=st.session_state.get(f"{key_prefix}_sp", True),
-                key=f"{key_prefix}_sp"
-            )
-        with col_i:
-            assist_present = st.checkbox(
-                "Meilleur passeur disponible ?",
-                value=st.session_state.get(f"{key_prefix}_ap", True),
-                key=f"{key_prefix}_ap"
-            )
+        # --- Saisie manuelle des 5 derniers matchs ---
+        _stored_matches = st.session_state.get(f"{key_prefix}_matches", [])
+        if _stored_matches:
+            st.markdown("**Derniers matchs :**")
+            for _m in _stored_matches:
+                _res = "V" if _m["gf"] > _m["ga"] else ("N" if _m["gf"] == _m["ga"] else "D")
+                _ico = "✅" if _res == "V" else ("➖" if _res == "N" else "❌")
+                _loc_str = "Dom." if _m.get("loc") == "D" else "Ext."
+                st.caption(f"{_ico} {_m.get('date', '')}  vs {_m.get('opp', '?')} ({_loc_str}) : {_m['gf']}-{_m['ga']}")
+
+        with st.expander("📋 Saisir / modifier les 5 derniers matchs"):
+            _match_entries = []
+            _hdr = st.columns([2, 3, 1, 1, 1])
+            for _hc, _lbl in zip(_hdr, ["Date", "Adversaire", "Lieu", "BM", "BE"]):
+                _hc.caption(_lbl)
+            for _i in range(5):
+                _c1, _c2, _c3, _c4, _c5 = st.columns([2, 3, 1, 1, 1])
+                with _c1:
+                    _date = st.text_input(".", key=f"{key_prefix}_m{_i}_date",
+                                          placeholder="JJ/MM", label_visibility="collapsed")
+                with _c2:
+                    _opp = st.text_input(".", key=f"{key_prefix}_m{_i}_opp",
+                                         placeholder="Adversaire", label_visibility="collapsed")
+                with _c3:
+                    _loc = st.selectbox(".", ["D", "E"], key=f"{key_prefix}_m{_i}_loc",
+                                        label_visibility="collapsed")
+                with _c4:
+                    _gf = st.number_input(".", 0, 20, key=f"{key_prefix}_m{_i}_gf",
+                                          label_visibility="collapsed")
+                with _c5:
+                    _ga = st.number_input(".", 0, 20, key=f"{key_prefix}_m{_i}_ga",
+                                          label_visibility="collapsed")
+                _match_entries.append({"date": _date, "opp": _opp, "loc": _loc, "gf": int(_gf), "ga": int(_ga)})
+
+            if st.button("📊 Calculer W/D/L et moyennes", key=f"{key_prefix}_calc_matches"):
+                _filled = [m for m in _match_entries if m["opp"].strip()]
+                if _filled:
+                    _w = sum(1 for m in _filled if m["gf"] > m["ga"])
+                    _d = sum(1 for m in _filled if m["gf"] == m["ga"])
+                    _l = sum(1 for m in _filled if m["gf"] < m["ga"])
+                    _gs_avg = round(sum(m["gf"] for m in _filled) / len(_filled), 2)
+                    _gc_avg = round(sum(m["ga"] for m in _filled) / len(_filled), 2)
+                    st.session_state[f"{key_prefix}_w"]  = _w
+                    st.session_state[f"{key_prefix}_d"]  = _d
+                    st.session_state[f"{key_prefix}_l"]  = _l
+                    st.session_state[f"{key_prefix}_gs"] = _gs_avg
+                    st.session_state[f"{key_prefix}_gc"] = _gc_avg
+                    st.session_state[f"{key_prefix}_matches"] = _filled
+                    st.rerun()
+                else:
+                    st.warning("Entrez au moins un match (colonne Adversaire obligatoire).")
+
+        st.markdown("**Joueurs clés par ligne**")
+        _positions_config = [
+            ("Gardien", f"{key_prefix}_gk",  "Ex : Maignan, Courtois, Alisson…"),
+            ("Défense",  f"{key_prefix}_def", "Ex : Upamecano, van Dijk, Militão…"),
+            ("Milieu",   f"{key_prefix}_mid", "Ex : Tchouameni, De Bruyne, Pedri…"),
+            ("Attaque",  f"{key_prefix}_att", "Ex : Mbappé, Haaland, Vinicius…"),
+        ]
+        _pos_statuses = {}
+        for _pos_label, _pos_key, _placeholder in _positions_config:
+            _col_name, _col_status = st.columns([2, 3])
+            with _col_name:
+                st.text_input(
+                    f"Joueur clé — {_pos_label}",
+                    key=f"{_pos_key}_name",
+                    placeholder=_placeholder,
+                )
+            with _col_status:
+                _def_s = st.session_state.get(f"{_pos_key}_status", "Titulaire")
+                if not isinstance(_def_s, str) or _def_s not in ["Titulaire", "Banc", "Absent"]:
+                    _def_s = "Titulaire"
+                _status = st.radio(
+                    _pos_label,
+                    options=["Titulaire", "Banc", "Absent"],
+                    index=["Titulaire", "Banc", "Absent"].index(_def_s),
+                    key=f"{_pos_key}_status",
+                    horizontal=True,
+                    label_visibility="collapsed",
+                )
+                _pos_statuses[_pos_label] = _status
+        gk_status  = _pos_statuses.get("Gardien", "Titulaire")
+        def_status = _pos_statuses.get("Défense", "Titulaire")
+        mid_status = _pos_statuses.get("Milieu",  "Titulaire")
+        att_status = _pos_statuses.get("Attaque", "Titulaire")
     else:
         col_h, col_i = st.columns(2)
         with col_h:
@@ -351,10 +423,14 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
         team = {
             "wins": wins, "draws": draws, "losses": losses,
             "goals_scored": goals_scored, "goals_conceded": goals_conceded,
-            "max_goals_by_player": max_goals,
-            "max_assists_by_player": max_assists,
-            "top_scorer_present": scorer_present,
-            "top_assist_present": assist_present,
+            "max_goals_by_player": 0,
+            "max_assists_by_player": 0,
+            "top_scorer_present": att_status,
+            "top_assist_present": mid_status,
+            "gk_status":  gk_status,
+            "def_status": def_status,
+            "mid_status": mid_status,
+            "att_status": att_status,
             "fifa_rank": rank,
         }
     else:
@@ -398,7 +474,7 @@ def render_team_form(side_label: str, key_prefix: str, is_international: bool):
         }
     return team
 
-def render_common_analysis(home, away, key_prefix, competition_label):
+def render_common_analysis(home, away, key_prefix, competition_label, is_international=False):
     st.markdown("---")
     st.markdown('<div class="section-header">💰 Cotes bookmaker</div>', unsafe_allow_html=True)
 
@@ -438,7 +514,8 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 home["max_assists_by_player"],
                 home["top_scorer_present"],
                 home["top_assist_present"],
-                home_power
+                home_power,
+                is_international=is_international,
             )
             adj_away = adjust_expected_goals(
                 away["goals_scored"],
@@ -446,7 +523,8 @@ def render_common_analysis(home, away, key_prefix, competition_label):
                 away["max_assists_by_player"],
                 away["top_scorer_present"],
                 away["top_assist_present"],
-                away_power
+                away_power,
+                is_international=is_international,
             )
 
             best_score, _ = predict_scores(adj_home, adj_away)
@@ -1641,7 +1719,7 @@ with tab2:
         home_int = render_team_form("Domicile", "int_h", is_international=True)
     with col2:
         away_int = render_team_form("Extérieur", "int_a", is_international=True)
-    render_common_analysis(home_int, away_int, "int", "Sélections")
+    render_common_analysis(home_int, away_int, "int", "Sélections", is_international=True)
 
 with tab3:
     render_analyse_tab()

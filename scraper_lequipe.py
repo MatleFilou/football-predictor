@@ -87,22 +87,37 @@ COMPETITIONS = {
     "coupe-intercontinentale":    "Coupe Intercontinentale",
     "super-coupe-d-europe":       "Super Coupe d'Europe",
     "trophee-des-champions":      "Trophée des Champions",
-    # Coupes nationales
+    # Coupes nationales clubs
     "coupe-d-allemagne":          "Coupe d'Allemagne",
     "fa-cup":                     "FA Cup",
     "league-cup":                 "League Cup",
     "coupe-du-roi":               "Copa del Rey",
     "coupe-d-italie":             "Coupe d'Italie",
+    # Compétitions internationales (sélections)
+    "ligue-des-nations":                      "Ligue des Nations",
+    "qualifications-coupe-du-monde":          "Qualif. Coupe du Monde",
+    "coupe-du-monde":                         "Coupe du Monde",
+    "euro":                                   "Euro",
+    "qualifications-euro":                    "Qualif. Euro",
+    "copa-america":                           "Copa América",
+    "can":                                    "CAN",
+    "amical":                                 "Match amical",
 }
 
 # Compétitions supplémentaires à scraper selon la ligue principale
 # (en plus du championnat national, pour couvrir toutes les compétitions)
 EXTRA_COMPS_BY_MAIN: dict[str, list[str]] = {
+    # Clubs
     "ligue-1":                  ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-de-france"],
     "championnat-d-allemagne":  ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-d-allemagne"],
     "championnat-d-angleterre": ["ligue-des-champions", "ligue-europa", "ligue-conference", "fa-cup", "league-cup"],
     "championnat-d-espagne":    ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-du-roi"],
     "championnat-d-italie":     ["ligue-des-champions", "ligue-europa", "ligue-conference", "coupe-d-italie"],
+    # Sélections nationales : qualifs CM comme principal + LdN en fallback uniquement
+    # (2 comps max en parallèle = même performance que les clubs)
+    "qualifications-coupe-du-monde": ["ligue-des-nations"],
+    "copa-america":                  ["qualifications-coupe-du-monde"],
+    "can":                           ["qualifications-coupe-du-monde"],
 }
 
 # Durée de vie du cache (heures) — données considérées fraîches pendant cette durée
@@ -121,6 +136,34 @@ DEFAULT_COMPETITIONS_IT = ["championnat-d-italie", "ligue-des-champions"]
 # Slug → compétition principale sur lequipe.fr
 # Slugs vérifiés directement sur lequipe.fr via les pages club
 SLUG_COMPETITION: dict[str, str] = {
+    # Sélections nationales → compétition principale (qualifs CM 2026 en cours)
+    # Fallback ligue-des-nations défini dans EXTRA_COMPS_BY_MAIN
+    "france":       "qualifications-coupe-du-monde",
+    "espagne":      "qualifications-coupe-du-monde",
+    "allemagne":    "qualifications-coupe-du-monde",
+    "angleterre":   "qualifications-coupe-du-monde",
+    "portugal":     "qualifications-coupe-du-monde",
+    "italie":       "qualifications-coupe-du-monde",
+    "pays-bas":     "qualifications-coupe-du-monde",
+    "belgique":     "qualifications-coupe-du-monde",
+    "croatie":      "qualifications-coupe-du-monde",
+    "suisse":       "qualifications-coupe-du-monde",
+    "danemark":     "qualifications-coupe-du-monde",
+    "autriche":     "qualifications-coupe-du-monde",
+    "turquie":      "qualifications-coupe-du-monde",
+    "pologne":      "qualifications-coupe-du-monde",
+    "suede":        "qualifications-coupe-du-monde",
+    "norvege":      "qualifications-coupe-du-monde",
+    "ukraine":      "qualifications-coupe-du-monde",
+    "serbie":       "qualifications-coupe-du-monde",
+    "ecosse":       "qualifications-coupe-du-monde",
+    "argentine":    "qualifications-coupe-du-monde",
+    "bresil":       "qualifications-coupe-du-monde",
+    "uruguay":      "qualifications-coupe-du-monde",
+    "colombie":     "qualifications-coupe-du-monde",
+    "chili":        "qualifications-coupe-du-monde",
+    "mexique":      "qualifications-coupe-du-monde",
+    "etats-unis":   "qualifications-coupe-du-monde",
     # Ligue 1 (18 équipes 2025-26)
     "paris-sg": "ligue-1", "marseille": "ligue-1", "lyon": "ligue-1",
     "monaco": "ligue-1", "lille": "ligue-1", "nice": "ligue-1",
@@ -213,6 +256,67 @@ SLUG_COMPETITION: dict[str, str] = {
 }
 
 KNOWN_SLUGS: dict[str, str] = {
+    # Sélections nationales
+    "france":               "france",
+    "equipe de france":     "france",
+    "les bleus":            "france",
+    "espagne":              "espagne",
+    "spain":                "espagne",
+    "seleccion espanola":   "espagne",
+    "allemagne":            "allemagne",
+    "germany":              "allemagne",
+    "angleterre":           "angleterre",
+    "england":              "angleterre",
+    "three lions":          "angleterre",
+    "portugal":             "portugal",
+    "italie":               "italie",
+    "italy":                "italie",
+    "azzurri":              "italie",
+    "pays-bas":             "pays-bas",
+    "pays bas":             "pays-bas",
+    "hollande":             "pays-bas",
+    "netherlands":          "pays-bas",
+    "belgique":             "belgique",
+    "belgium":              "belgique",
+    "diables rouges":       "belgique",
+    "croatie":              "croatie",
+    "croatia":              "croatie",
+    "suisse":               "suisse",
+    "switzerland":          "suisse",
+    "danemark":             "danemark",
+    "denmark":              "danemark",
+    "autriche":             "autriche",
+    "austria":              "autriche",
+    "turquie":              "turquie",
+    "turkey":               "turquie",
+    "pologne":              "pologne",
+    "poland":               "pologne",
+    "suede":                "suede",
+    "sweden":               "suede",
+    "norvege":              "norvege",
+    "norway":               "norvege",
+    "ukraine":              "ukraine",
+    "serbie":               "serbie",
+    "serbia":               "serbie",
+    "ecosse":               "ecosse",
+    "scotland":             "ecosse",
+    "argentine":            "argentine",
+    "argentina":            "argentine",
+    "albiceleste":          "argentine",
+    "bresil":               "bresil",
+    "brazil":               "bresil",
+    "selecao":              "bresil",
+    "uruguay":              "uruguay",
+    "colombie":             "colombie",
+    "colombia":             "colombie",
+    "chili":                "chili",
+    "chile":                "chili",
+    "mexique":              "mexique",
+    "mexico":               "mexique",
+    "etats-unis":           "etats-unis",
+    "etats unis":           "etats-unis",
+    "usa":                  "etats-unis",
+    "united states":        "etats-unis",
     # Ligue 1
     "psg": "paris-sg",
     "paris saint-germain": "paris-sg",
