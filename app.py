@@ -722,13 +722,13 @@ def render_common_analysis(home, away, key_prefix, competition_label, is_interna
                 _stake_color  = "#d63031"
                 _stake_icon   = "🚫"
             elif index < 60:
-                _stake_amount = "€4"
+                _stake_amount = "€5"
                 _stake_label  = "Mise standard"
                 _stake_reason = f"Indice modéré ({index}/100) + value détectée — mise prudente."
                 _stake_color  = "#f5a623"
                 _stake_icon   = "💶"
             elif index < 75:
-                _stake_amount = "€6"
+                _stake_amount = "€10"
                 _stake_label  = "Mise intermédiaire"
                 _stake_reason = f"Bon indice ({index}/100) + value détectée — mise de confiance."
                 _stake_color  = "#0984e3"
