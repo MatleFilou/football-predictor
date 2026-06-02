@@ -734,7 +734,7 @@ def render_common_analysis(home, away, key_prefix, competition_label, is_interna
                 _stake_color  = "#0984e3"
                 _stake_icon   = "💶"
             else:
-                _stake_amount = "€10"
+                _stake_amount = "€20"
                 _stake_label  = "Mise forte"
                 _stake_reason = f"Fort indice ({index}/100) + value détectée — mise maximale."
                 _stake_color  = "#00b894"
