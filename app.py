@@ -705,6 +705,61 @@ def render_common_analysis(home, away, key_prefix, competition_label, is_interna
             </div>
             """, unsafe_allow_html=True)
 
+            # --- Mise recommandée ---
+            st.markdown("---")
+            _has_value = cotes_renseignees and best_edge is not None and best_edge > 0
+
+            if not _has_value:
+                _stake_amount = "€0"
+                _stake_label  = "Ne pas miser"
+                _stake_reason = "Aucun marché ne présente de value — le bookmaker a l'avantage."
+                _stake_color  = "#d63031"
+                _stake_icon   = "🚫"
+            elif index < 45:
+                _stake_amount = "€0"
+                _stake_label  = "Ne pas miser"
+                _stake_reason = f"Indice de confiance trop faible ({index}/100) — risque trop élevé."
+                _stake_color  = "#d63031"
+                _stake_icon   = "🚫"
+            elif index < 60:
+                _stake_amount = "€4"
+                _stake_label  = "Mise standard"
+                _stake_reason = f"Indice modéré ({index}/100) + value détectée — mise prudente."
+                _stake_color  = "#f5a623"
+                _stake_icon   = "💶"
+            elif index < 75:
+                _stake_amount = "€6"
+                _stake_label  = "Mise intermédiaire"
+                _stake_reason = f"Bon indice ({index}/100) + value détectée — mise de confiance."
+                _stake_color  = "#0984e3"
+                _stake_icon   = "💶"
+            else:
+                _stake_amount = "€10"
+                _stake_label  = "Mise forte"
+                _stake_reason = f"Fort indice ({index}/100) + value détectée — mise maximale."
+                _stake_color  = "#00b894"
+                _stake_icon   = "💶"
+
+            st.markdown(f"""
+            <div style="background:#1e272e;border:2px solid {_stake_color};border-radius:12px;
+                        padding:18px 24px;display:flex;align-items:center;gap:24px;margin-bottom:4px">
+              <div style="font-size:2.8rem;line-height:1">{_stake_icon}</div>
+              <div style="flex:1">
+                <div style="color:#90a4ae;font-size:0.72rem;text-transform:uppercase;
+                            letter-spacing:1.5px;font-weight:700;margin-bottom:4px">
+                  💰 Mise recommandée
+                </div>
+                <div style="display:flex;align-items:baseline;gap:12px">
+                  <span style="color:{_stake_color};font-size:2.2rem;font-weight:800;line-height:1">
+                    {_stake_amount}
+                  </span>
+                  <span style="color:#cfd8dc;font-size:1rem;font-weight:600">{_stake_label}</span>
+                </div>
+                <div style="color:#90a4ae;font-size:0.85rem;margin-top:6px">{_stake_reason}</div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
             # --- Guide parieur ---
             st.markdown("---")
             st.markdown('<div class="section-header">📋 Guide parieur</div>', unsafe_allow_html=True)
